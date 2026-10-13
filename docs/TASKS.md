@@ -30,7 +30,7 @@ Updated: 2026-10-13. Ledger for the native Windows port. See `../../PLAN.md` (ma
 - [x] Windows CLI + installer — start/stop/restart/status/logs/channel/install-service tested from cmd, PowerShell and Git Bash; install.ps1 ran end-to-end; auto-start installed and removed cleanly (4321d51).
 - [x] Desktop app builds and runs on Windows — `OctoAlly Setup 1.0.89.exe` built; second launch exits (single instance); window loaded the dashboard (143f4b8).
 - [x] Windows paths end-to-end on the server — e2e: backslash paths normalised; "This PC" lists C: and G:.
-- [x] winmux wired into the server — e2e 32/32: terminal in the project folder; server killed, session survives with its screen; pop-out/re-adopt; external session adoption; kill; graceful shutdown.
+- [x] winmux wired into the server — e2e 30/30: terminal in the project folder; server killed, session survives with its screen; pop-out/re-adopt; external session adoption; kill; graceful shutdown.
 - [x] Windows command launcher — quotes, `%`, `&`, newlines, Unicode, trailing backslashes reach the program exactly; npm tools run as `node <script>`.
 - [x] winmux: Windows replacement for tmux (b4962f1).
 - [x] Cross-platform build scripts + Windows dependency install.
