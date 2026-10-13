@@ -2,12 +2,35 @@ import { app, BrowserWindow, Menu, shell, ipcMain, session, globalShortcut, dial
 import * as path from 'path';
 import * as http from 'http';
 import { resolveCliPath, isServerReachable, startServer, waitForServer, stopServer, stopServerOnPort, isServerRunning, isServiceInstalled } from './server-manager';
-import { createTray, destroyTray } from './tray';
+import { createTray, destroyTray, resolveIconPath, LOGIN_ITEM_ARGS } from './tray';
 import { registerSpeechHandlers } from './speech';
 import { readDesktopSettings, writeDesktopSetting } from './desktop-settings';
 
 let mainWindow: BrowserWindow | null = null;
 const cliPath = resolveCliPath();
+
+// Windows: taskbar grouping / notifications need an explicit AppUserModelID
+// (matches build.appId so the installed shortcut and the running app agree).
+if (process.platform === 'win32') {
+  app.setAppUserModelId('com.aigenius.octoally');
+}
+
+// Only one instance: a second launch focuses the existing window instead of
+// starting another tray icon + server watchdog.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      showWindow();
+    }
+  });
+}
+
+// Launched at login with LOGIN_ITEM_ARGS — stay in the tray until opened.
+const startHidden = LOGIN_ITEM_ARGS.every((a) => process.argv.includes(a));
 
 function createWindow() {
   // Remove default menu bar (File/Edit/View/Window/Help)
@@ -19,7 +42,8 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     title: 'OctoAlly',
-    icon: path.join(__dirname, '..', 'icons', '128x128.png'),
+    show: !startHidden,
+    icon: resolveIconPath(process.platform === 'win32' ? 'icon.ico' : '128x128.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       // Security: disable nodeIntegration, enable context isolation
@@ -152,7 +176,7 @@ function createWindow() {
       // Stop server then quit
       (async () => {
         if (!isServiceInstalled()) {
-          if (isServerRunning(cliPath)) {
+          if (await isServerRunning(cliPath)) {
             await stopServer(cliPath);
           } else {
             await stopServerOnPort();
@@ -184,6 +208,9 @@ app.on('before-quit', () => {
 });
 
 app.whenReady().then(async () => {
+  // Losing instance is already quitting — don't start servers/windows
+  if (!gotSingleInstanceLock) return;
+
   // Register IPC handlers
   ipcMain.handle('get-version', () => app.getVersion());
   ipcMain.handle('app-quit', () => app.exit(0));
@@ -205,7 +232,7 @@ app.whenReady().then(async () => {
       if (remember) writeDesktopSetting('closeBehavior', 'quit-all');
       // Stop the server before quitting
       if (!isServiceInstalled()) {
-        if (isServerRunning(cliPath)) {
+        if (await isServerRunning(cliPath)) {
           await stopServer(cliPath);
         } else {
           await stopServerOnPort();
@@ -477,6 +504,7 @@ app.whenReady().then(async () => {
 
 // macOS: re-create window when dock icon is clicked
 app.on('activate', () => {
+  if (!gotSingleInstanceLock) return;
   if (mainWindow) {
     showWindow();
   } else {

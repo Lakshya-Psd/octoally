@@ -4,6 +4,7 @@
  */
 
 import { ipcMain, BrowserWindow } from 'electron';
+import { spawn } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -244,6 +245,34 @@ const state: SpeechState = {
 
 // Load voice commands from config
 loadCommands(cfg.customCommands || [], cfg.builtinOverrides || {});
+
+/**
+ * Run a user-defined voice command's shell action in the background.
+ * POSIX: /bin/sh via exec. Windows: hidden PowerShell; the command is passed
+ * base64-encoded (-EncodedCommand ≡ -Command) so quotes survive Windows
+ * command-line re-quoting. Not `detached`: PowerShell 5.1 started with
+ * DETACHED_PROCESS (no console) exits without running anything. Programs it
+ * launches still outlive the app (libuv's job allows silent breakaway).
+ */
+function runShellAction(shellCmd: string) {
+  try {
+    if (process.platform === 'win32') {
+      const encoded = Buffer.from(shellCmd, 'utf16le').toString('base64');
+      const child = spawn(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+        { stdio: 'ignore', windowsHide: true },
+      );
+      child.on('error', (err) => console.error(`[STT] Shell command failed: ${err.message}`));
+      child.unref();
+      return;
+    }
+    const { exec } = require('child_process');
+    exec(shellCmd, { shell: true });
+  } catch (err) {
+    console.error(`[STT] Shell command failed: ${err}`);
+  }
+}
 
 /** Emit an event to all renderer windows */
 function emit(channel: string, data?: unknown) {
@@ -778,8 +807,7 @@ function handleVadEvent(event: VadEvent, whisperBin: string, modelPath: string) 
               }
               if (cmd.action.kind === 'shell') {
                 const { command: shellCmd, background } = cmd.action as import('./commands').ShellAction;
-                const { exec } = require('child_process');
-                if (background) exec(shellCmd, { shell: true });
+                if (background) runShellAction(shellCmd);
               }
               muteVad();
               emit('stt://voice-command', { commandId: cmd.id, action: cmd.action, param: matched.param, rawText: text });
@@ -831,8 +859,7 @@ function handleVadEventCloud(event: VadEvent, provider: CloudProvider, apiKey: s
               }
               if (cmd.action.kind === 'shell') {
                 const { command: shellCmd, background } = cmd.action as import('./commands').ShellAction;
-                const { exec } = require('child_process');
-                if (background) exec(shellCmd, { shell: true });
+                if (background) runShellAction(shellCmd);
               }
               muteVad();
               emit('stt://voice-command', { commandId: cmd.id, action: cmd.action, param: matched.param, rawText: text });
@@ -949,9 +976,8 @@ function handleVadEventWakeWord(
               // Shell commands execute in main process
               if (cmd.action.kind === 'shell') {
                 const { command: shellCmd, background } = cmd.action as import('./commands').ShellAction;
-                const { exec } = require('child_process');
                 if (background) {
-                  exec(shellCmd, { shell: true });
+                  runShellAction(shellCmd);
                 }
               }
 

@@ -4,7 +4,8 @@ const common = {
   bundle: true,
   platform: 'node',
   target: 'node20',
-  external: ['electron'],
+  // ffmpeg-static locates its binary via __dirname, so it must stay a real module
+  external: ['electron', 'ffmpeg-static'],
   sourcemap: true,
   logLevel: 'info',
 };

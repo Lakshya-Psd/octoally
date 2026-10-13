@@ -1,10 +1,11 @@
 /**
  * Whisper.cpp inference via subprocess.
  * Writes utterance to temp WAV file, runs whisper-cli, parses output.
- * Auto-downloads and builds whisper.cpp from source on first use.
+ * Auto-downloads and builds whisper.cpp from source on first use
+ * (Windows: downloads the prebuilt CPU x64 release zip instead).
  */
 
-import { execFile, execSync, spawn } from 'child_process';
+import { execFile, execFileSync, execSync, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -13,6 +14,9 @@ import { downloadFile } from './download';
 const WHISPER_THREADS = 4;
 const WHISPER_VERSION = 'v1.8.3';
 const WHISPER_SOURCE_URL = `https://github.com/ggml-org/whisper.cpp/archive/refs/tags/${WHISPER_VERSION}.tar.gz`;
+// Plain CPU x64 build (whisper-cli.exe + its DLLs) from the GitHub release
+const WHISPER_WINDOWS_ZIP_URL = `https://github.com/ggml-org/whisper.cpp/releases/download/${WHISPER_VERSION}/whisper-bin-x64.zip`;
+const IS_WINDOWS = process.platform === 'win32';
 
 export interface WhisperInstallProgress {
   stage: 'downloading' | 'extracting' | 'building' | 'done' | 'error';
@@ -28,8 +32,39 @@ function whisperBinPath(): string {
   return path.join(whisperBinDir(), 'whisper-cli');
 }
 
+/** Windows: whisper-cli.exe lives with its DLLs in ~/.octoally/bin/whisper/ */
+function whisperWindowsDir(): string {
+  return path.join(whisperBinDir(), 'whisper');
+}
+
+function whisperWindowsBinPath(): string {
+  return path.join(whisperWindowsDir(), 'whisper-cli.exe');
+}
+
+function findWhisperBinaryWindows(): string | null {
+  try {
+    const out = execFileSync('where.exe', ['whisper-cli'], {
+      encoding: 'utf-8',
+      timeout: 3000,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    // Only real executables — .cmd/.bat shims can't be run without a shell
+    const found = out
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => l.toLowerCase().endsWith('.exe') && fs.existsSync(l));
+    if (found) return found;
+  } catch {}
+
+  const installed = whisperWindowsBinPath();
+  return fs.existsSync(installed) ? installed : null;
+}
+
 /** Find the whisper.cpp binary */
 export function findWhisperBinary(): string | null {
+  if (IS_WINDOWS) return findWhisperBinaryWindows();
+
   // Check common names/locations
   const names = ['whisper-cli', 'whisper-cpp', 'whisper', 'main'];
   const extraPaths = [
@@ -78,6 +113,8 @@ function checkBuildTools(): string[] {
 export async function installWhisperBinary(
   onProgress: (progress: WhisperInstallProgress) => void,
 ): Promise<string> {
+  if (IS_WINDOWS) return installWhisperBinaryWindows(onProgress);
+
   const destBin = whisperBinPath();
 
   // Already installed?
@@ -174,6 +211,119 @@ export async function installWhisperBinary(
   }
 }
 
+/** Recursively find a file by name (case-insensitive) under dir */
+function findFile(dir: string, name: string): string | null {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, entry.name);
+    if (entry.isFile() && entry.name.toLowerCase() === name.toLowerCase()) return p;
+    if (entry.isDirectory()) {
+      const found = findFile(p, name);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** Run `whisper-cli.exe --help` to prove the exe and its DLLs load */
+function verifyWhisperBinary(bin: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(bin, ['--help'], { timeout: 15000, windowsHide: true }, (err, stdout, stderr) => {
+      const output = `${stdout}${stderr}`;
+      if (/usage:/i.test(output)) {
+        resolve();
+        return;
+      }
+      const code = (err as any)?.code;
+      // 0xC0000135 STATUS_DLL_NOT_FOUND / 0xC000007B bad image — usually the VC++ runtime
+      const hint = code === 3221225781 || code === -1073741515 || code === 3221225595 || code === -1073741701
+        ? ' A required DLL is missing — install the Microsoft Visual C++ Redistributable (x64) and retry.'
+        : '';
+      reject(new Error(`whisper-cli failed to run (${err ? err.message : 'no usage output'}).${hint}`));
+    });
+  });
+}
+
+/**
+ * Windows: download the prebuilt whisper.cpp CPU build and unpack it into
+ * ~/.octoally/bin/whisper/ (whisper-cli.exe needs the DLLs next to it).
+ * Emits the same progress stages as the build-from-source path.
+ */
+async function installWhisperBinaryWindows(
+  onProgress: (progress: WhisperInstallProgress) => void,
+): Promise<string> {
+  const destDir = whisperWindowsDir();
+  const destBin = whisperWindowsBinPath();
+
+  // Already installed?
+  if (fs.existsSync(destBin)) {
+    onProgress({ stage: 'done', percent: 100, message: 'Already installed' });
+    return destBin;
+  }
+
+  const tmpDir = path.join(os.tmpdir(), `octoally-whisper-${Date.now()}`);
+  const extractDir = path.join(tmpDir, 'extract');
+  fs.mkdirSync(extractDir, { recursive: true });
+  const zipPath = path.join(tmpDir, 'whisper-bin-x64.zip');
+
+  try {
+    // Stage 1: Download prebuilt release
+    onProgress({ stage: 'downloading', percent: 0, message: `Downloading whisper.cpp ${WHISPER_VERSION} for Windows...` });
+    await downloadFile(WHISPER_WINDOWS_ZIP_URL, zipPath, (p) => {
+      onProgress({
+        stage: 'downloading',
+        percent: Math.round(p.percent * 0.8), // 0-80%
+        message: `Downloading: ${(p.bytesDone / 1048576).toFixed(1)} / ${(p.bytesTotal / 1048576).toFixed(1)} MB`,
+      });
+    });
+
+    // Stage 2: Extract — Windows' bsdtar (System32\tar.exe) reads zip files.
+    // Use it explicitly: a GNU tar from Git/MSYS earlier on PATH cannot.
+    onProgress({ stage: 'extracting', percent: 80, message: 'Extracting whisper.cpp...' });
+    const systemTar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe');
+    const tarBin = fs.existsSync(systemTar) ? systemTar : 'tar';
+    await runCommand(tarBin, ['-xf', zipPath, '-C', extractDir]);
+
+    const extractedBin = findFile(extractDir, 'whisper-cli.exe');
+    if (!extractedBin) {
+      throw new Error('Downloaded archive does not contain whisper-cli.exe');
+    }
+
+    // Copy the exe together with the DLLs beside it (ggml, whisper, SDL2)
+    onProgress({ stage: 'extracting', percent: 90, message: 'Installing whisper-cli.exe...' });
+    fs.rmSync(destDir, { recursive: true, force: true });
+    fs.mkdirSync(destDir, { recursive: true });
+    const srcDir = path.dirname(extractedBin);
+    for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+      const lower = entry.name.toLowerCase();
+      if (entry.isFile() && (lower === 'whisper-cli.exe' || lower.endsWith('.dll'))) {
+        fs.copyFileSync(path.join(srcDir, entry.name), path.join(destDir, entry.name));
+      }
+    }
+
+    // Stage 3: Verify it actually runs
+    onProgress({ stage: 'extracting', percent: 95, message: 'Verifying whisper-cli.exe...' });
+    try {
+      await verifyWhisperBinary(destBin);
+    } catch (e) {
+      fs.rmSync(destDir, { recursive: true, force: true });
+      throw e;
+    }
+
+    onProgress({ stage: 'done', percent: 100, message: 'whisper.cpp installed successfully' });
+    console.error(`[STT] Installed whisper binary: ${destBin}`);
+    return destBin;
+  } catch (e: any) {
+    const msg = e?.message || String(e);
+    onProgress({ stage: 'error', percent: 0, message: msg });
+    throw e instanceof Error ? e : new Error(msg);
+  } finally {
+    // Clean up download directory
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
+  }
+}
+
 /** Run a command as a promise */
 function runCommand(
   cmd: string,
@@ -181,7 +331,7 @@ function runCommand(
   opts: { cwd?: string } = {},
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, { cwd: opts.cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    const proc = spawn(cmd, args, { cwd: opts.cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     let stderr = '';
 
     proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
@@ -276,7 +426,7 @@ export function transcribe(
       '-np', // no prints
     ];
 
-    execFile(whisperBin, args, { timeout: 60000 }, (err, stdout, stderr) => {
+    execFile(whisperBin, args, { timeout: 60000, windowsHide: true }, (err, stdout, stderr) => {
       // Clean up temp file
       try {
         fs.unlinkSync(tmpFile);

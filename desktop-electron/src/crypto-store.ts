@@ -7,9 +7,11 @@
  * Encrypted values are stored as "enc:<base64>" strings.
  * Plaintext values (legacy) are detected and re-encrypted on next save.
  *
- * Works on Linux and macOS — uses only Node built-ins (crypto, os, fs).
+ * Works on Linux, macOS and Windows — uses only Node built-ins (crypto, os, fs),
+ * plus icacls on Windows to restrict the keyfile to the current user.
  */
 
+import { execFile } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -74,7 +76,25 @@ function getSalt(): Buffer {
   // Also tighten permissions on the directory
   try { fs.chmodSync(dir, 0o700); } catch {}
 
+  // Windows ignores POSIX modes — drop inherited ACLs and grant only the
+  // current user (best effort, async so startup is not blocked).
+  if (process.platform === 'win32') restrictToCurrentUserWindows(kfPath);
+
   return salt;
+}
+
+function restrictToCurrentUserWindows(file: string) {
+  try {
+    const user = os.userInfo().username;
+    execFile(
+      'icacls',
+      [file, '/inheritance:r', '/grant:r', `${user}:F`],
+      { timeout: 10000, windowsHide: true },
+      (err) => {
+        if (err) console.warn(`[OctoAlly] Could not restrict keyfile permissions: ${err.message}`);
+      },
+    );
+  } catch {}
 }
 
 // ---------------------------------------------------------------------------

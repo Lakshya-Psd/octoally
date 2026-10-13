@@ -12,7 +12,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "start": "npm run build && electron . --no-sandbox",
-    "start:dev": "npm run build && ELECTRON_ENABLE_LOGGING=1 electron . --no-sandbox",
+    "start:dev": "npm run build && cross-env ELECTRON_ENABLE_LOGGING=1 electron . --no-sandbox",
     "dist": "npm run build && electron-builder",
     "dist:linux": "npm run build && electron-builder --linux",
     "dist:mac": "npm run build && electron-builder --mac",
@@ -28,6 +28,15 @@
       "dist/**",
       "icons/**",
       "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "icons",
+        "to": "icons"
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
     ],
     "linux": {
       "target": [
@@ -46,7 +55,10 @@
       ],
       "category": "Development",
       "icon": "icons",
-      "executableName": "octoally-desktop"
+      "executableName": "octoally-desktop",
+      "files": [
+        "!node_modules/ffmpeg-static/**"
+      ]
     },
     "mac": {
       "target": [
@@ -59,7 +71,10 @@
         }
       ],
       "category": "public.app-category.developer-tools",
-      "icon": "icons/icon.icns"
+      "icon": "icons/icon.icns",
+      "files": [
+        "!node_modules/ffmpeg-static/**"
+      ]
     },
     "win": {
       "target": [
@@ -79,15 +94,23 @@
     }
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "electron": "^41.10.7",
     "electron-builder": "^26.17.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.7.0"
   },
   "optionalDependencies": {
-    "dmg-license": "^1.0.11"
+    "dmg-license": "^1.0.11",
+    "ffmpeg-static": "^5.3.0"
   },
   "overrides": {
     "@xmldom/xmldom": "~0.8.15"
+  },
+  "allowScripts": {
+    "electron": true,
+    "esbuild": true,
+    "ffmpeg-static": true,
+    "electron-winstaller": true
   }
 }
