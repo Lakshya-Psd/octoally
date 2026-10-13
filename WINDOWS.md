@@ -93,6 +93,27 @@ Plain terminals use PowerShell 7 (`pwsh`) if it is installed, otherwise Windows 
 | Right-click | Copy the selection, or paste if nothing is selected |
 | Ctrl+Shift+C / Ctrl+Shift+V | Copy / paste, as on Linux |
 
+## Seeing what Claude made
+
+Open the file explorer (folder icon on the left) and click a file. The viewer can show these files:
+
+| File types | Preview |
+|---|---|
+| png, jpg, gif, webp, avif, bmp, ico, svg | Image, with fit / zoom |
+| mp4, webm, mov, m4v, ogv, mkv | Video player with seeking |
+| mp3, wav, ogg, m4a, aac, flac, opus | Audio player |
+| pdf | PDF viewer |
+| html | Live page; its own CSS, JavaScript and images load |
+| md | Rendered Markdown; images next to the file show |
+| csv, tsv | Table |
+
+Pages, SVG, Markdown and CSV files have a **Preview / Code** switch.
+
+- **Auto-refresh.** The preview reloads by itself when Claude changes the file.
+- **Toolbar buttons.** Reload, open in your browser, open in the default app, and show in File Explorer.
+- **Clickable paths.** When Claude mentions a file in a session (e.g. `C:\...\demo.mp4` or `src/App.tsx`), click it to open the preview.
+- **Safety.** Previewed web pages run on a separate local address, so they can't control OctoAlly.
+
 ## Desktop app
 
 Build it with `install.ps1 -Desktop`, or run `npm run dist:win` in `desktop-electron`, then run `OctoAlly Setup <version>.exe`. On Windows the tray app:

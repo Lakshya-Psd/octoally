@@ -14,6 +14,7 @@ Updated: 2026-10-13. Ledger for the native Windows port. See `../../PLAN.md` (ma
   **Why:** every change is guarded to Windows, but Linux/macOS weren't re-run. Only matters if this fork will be shared with Linux/macOS users.
 
 ## Done
+- [x] Visual previews in the file viewer, like the Claude desktop app (Lakshya's request) — seen working in the dashboard: video player, image with zoom, audio player, PDF viewer, live HTML page with its CSS/JS/image, SVG, CSV table, Markdown with image; preview updated on its own when the file changed; clicking a path printed in a terminal opened the video; Open-in-default-app opened Photos, Show-in-file-manager opened Explorer; previewed page could not reach the API; e2e 30/30 without pop-out (5a0226d).
 - [x] Desktop app installed and set to start at login — installed per-user to `%LOCALAPPDATA%\Programs\OctoAlly` (Start menu shortcut); Run key `com.aigenius.octoally` = `"…\OctoAlly.exe" --hidden`; launched from Explorer it started the server (PID 58704) and opened its window. Lakshya's call.
 - [x] `octoally update` on a branch with no remote — `update --force` reinstalled and rebuilt everything and restarted the server (6deff33).
 - [x] Windows docs — `WINDOWS.md` + README platform row (1d7cf0b).
