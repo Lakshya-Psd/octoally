@@ -1,7 +1,10 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { Folder, FolderOpen, File, ChevronRight, ChevronDown, ChevronUp, Loader2, Save, Circle, Eye, Pencil, Home, X, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, GitCompareArrows, FolderOpen as FolderOpenIcon, Terminal, Scissors, Copy as CopyIcon, Clipboard, Trash2, Edit3 } from 'lucide-react';
+import { Folder, FolderOpen, File, ChevronRight, ChevronDown, ChevronUp, Loader2, Save, Circle, Eye, Pencil, Home, X, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, GitCompareArrows, FolderOpen as FolderOpenIcon, Terminal, Scissors, Copy as CopyIcon, Clipboard, Trash2, Edit3, RotateCw, ExternalLink, Globe, Code } from 'lucide-react';
 import { api, type FileEntry } from '../lib/api';
 import { ConfirmModal } from './ConfirmModal';
+import { FilePreview, PreviewUnavailable } from './FilePreview';
+import { previewKind, isMediaKind, hasSourceView, previewUrl, type PreviewKind } from '../lib/preview';
+import { usePlatform } from '../lib/platform';
 import { baseName, isSubPath, joinPath, normalizePath, parentDir, pathEquals, relativeSubPath, rootOf } from '../lib/paths';
 import {
   type HunkInfo,
@@ -52,6 +55,33 @@ interface FileTab {
   extension: string;
   size: number;
   viewMode: 'edit' | 'preview';
+  kind: PreviewKind;      // how the file can be shown (image, video, html, text ...)
+  binary: boolean;        // not text — never loaded into the editor
+  mtimeMs?: number;       // last modified time seen, for auto-refresh
+  version: number;        // bumped when the file changes on disk (reloads previews)
+}
+
+/** Read a file into a viewer tab. Media files aren't read as text — the preview
+ *  server streams them — so only their metadata is fetched. */
+async function loadFileTab(path: string, pinned: boolean): Promise<FileTab> {
+  const ext = (baseName(path) || '').includes('.') ? (baseName(path) || '').split('.').pop()!.toLowerCase() : '';
+  const kind = previewKind(ext);
+  if (isMediaKind(kind)) {
+    const st = await api.files.stat(path);
+    if (!st.exists) throw new Error('File not found');
+    return {
+      path: st.path, name: baseName(path) || path, pinned, content: '', editedContent: '',
+      extension: ext, size: st.size ?? 0, viewMode: 'preview', kind, binary: true,
+      mtimeMs: st.mtimeMs, version: Date.now(),
+    };
+  }
+  const data = await api.files.read(path);
+  return {
+    path: data.path, name: baseName(path) || path, pinned, content: data.content, editedContent: data.content,
+    extension: data.extension, size: data.size,
+    viewMode: hasSourceView(kind) && !data.binary ? 'preview' : 'edit',
+    kind, binary: !!data.binary, mtimeMs: data.mtimeMs, version: Date.now(),
+  };
 }
 
 interface CompareState {
@@ -401,6 +431,8 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
   const restoringRef = useRef(false);
   const treeScrollRef = useRef<HTMLDivElement>(null);
 
+  const platform = usePlatform();
+
   // Tab state
   const [tabs, setTabs] = useState<FileTab[]>([]);
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
@@ -559,17 +591,8 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
     setFileLoading(true);
     setFileError(null);
     try {
-      const data = await api.files.read(path);
-      const newTab: FileTab = {
-        path: data.path,
-        name: baseName(path) || path,
-        pinned: pin,
-        content: data.content,
-        editedContent: data.content,
-        extension: data.extension,
-        size: data.size,
-        viewMode: isMarkdownFile(data.extension) ? 'preview' : 'edit',
-      };
+      const newTab = await loadFileTab(path, pin);
+      const data = { path: newTab.path };
 
       setTabs(prev => {
         if (!pin) {
@@ -801,7 +824,8 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
     setSaveMessage(null);
     try {
       const result = await api.files.write(activeTab.path, activeTab.editedContent);
-      updateTab(activeTab.path, { content: activeTab.editedContent, size: result.size });
+      // New version → previews (HTML/SVG) reload with the saved content
+      updateTab(activeTab.path, { content: activeTab.editedContent, size: result.size, version: Date.now() });
       setSaveMessage('Saved');
       onFileSaved?.(activeTab.path);
       setTimeout(() => setSaveMessage(null), 2000);
@@ -852,10 +876,46 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
           content: data.content,
           editedContent: data.content,
           size: data.size,
+          mtimeMs: data.mtimeMs,
+          version: Date.now(),
         });
       }).catch(() => {});
     }
   }, [refreshFilePath, tabs]);
+
+  // Auto-refresh: when the open file changes on disk (e.g. Claude regenerated
+  // an image or page), reload its preview — and its text, unless it has
+  // unsaved edits.
+  const activeTabRef = useRef<FileTab | null>(null);
+  activeTabRef.current = activeTab;
+  useEffect(() => {
+    if (!activeTabPath) return;
+    const path = activeTabPath;
+    let busy = false;
+    const timer = setInterval(async () => {
+      const tab = activeTabRef.current;
+      if (busy || !tab || tab.path !== path || document.visibilityState !== 'visible') return;
+      busy = true;
+      try {
+        const st = await api.files.stat(path);
+        if (!st.exists || st.mtimeMs === undefined || st.mtimeMs === tab.mtimeMs) return;
+        if (tab.binary || isMediaKind(tab.kind)) {
+          updateTab(path, { mtimeMs: st.mtimeMs, size: st.size ?? tab.size, version: Date.now() });
+        } else if (tab.editedContent === tab.content) {
+          const data = await api.files.read(path);
+          updateTab(path, {
+            content: data.content, editedContent: data.content, size: data.size,
+            mtimeMs: data.mtimeMs ?? st.mtimeMs, binary: !!data.binary, version: Date.now(),
+          });
+        } else {
+          updateTab(path, { mtimeMs: st.mtimeMs }); // keep the user's unsaved edits
+        }
+      } catch { /* server busy or file gone — try again next tick */ }
+      finally { busy = false; }
+    }, 2000);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTabPath]);
 
   // Persist explorer state on changes
   useEffect(() => {
@@ -903,17 +963,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
         const restoredTabs: FileTab[] = [];
         for (const { path, pinned } of savedState.openTabPaths) {
           try {
-            const fileData = await api.files.read(path);
-            restoredTabs.push({
-              path: fileData.path,
-              name: baseName(path) || path,
-              pinned,
-              content: fileData.content,
-              editedContent: fileData.content,
-              extension: fileData.extension,
-              size: fileData.size,
-              viewMode: isMarkdownFile(fileData.extension) ? 'preview' : 'edit',
-            });
+            restoredTabs.push(await loadFileTab(path, pinned));
           } catch {
             // File may have been deleted — skip
           }
@@ -927,18 +977,9 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
         // Legacy: restore single selected file as a pinned tab
         restoringRef.current = true;
         try {
-          const fileData = await api.files.read(savedState.selectedFile);
-          setTabs([{
-            path: fileData.path,
-            name: baseName(savedState.selectedFile) || savedState.selectedFile,
-            pinned: true,
-            content: fileData.content,
-            editedContent: fileData.content,
-            extension: fileData.extension,
-            size: fileData.size,
-            viewMode: isMarkdownFile(fileData.extension) ? 'preview' : 'edit',
-          }]);
-          setActiveTabPath(fileData.path);
+          const restored = await loadFileTab(savedState.selectedFile, true);
+          setTabs([restored]);
+          setActiveTabPath(restored.path);
         } catch {
           // File may have been deleted — just skip
         }
@@ -1526,7 +1567,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
                     {saving ? 'Saving...' : 'Save'}
                   </button>
                 )}
-                {isMarkdown && (
+                {hasSourceView(activeTab.kind) && !activeTab.binary && (
                   <button
                     onClick={() => updateTab(activeTab.path, {
                       viewMode: activeTab.viewMode === 'preview' ? 'edit' : 'preview',
@@ -1536,26 +1577,79 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
                       background: 'var(--bg-tertiary)',
                       color: 'var(--text-primary)',
                     }}
-                    title={activeTab.viewMode === 'preview' ? 'Switch to editor' : 'Switch to preview'}
+                    title={activeTab.viewMode === 'preview' ? 'Show the source code' : 'Show the rendered preview'}
                   >
                     {activeTab.viewMode === 'preview' ? (
-                      <><Pencil className="w-3 h-3" /> Edit</>
+                      isMarkdown ? <><Pencil className="w-3 h-3" /> Edit</> : <><Code className="w-3 h-3" /> Code</>
                     ) : (
                       <><Eye className="w-3 h-3" /> Preview</>
                     )}
                   </button>
                 )}
+                <button
+                  onClick={() => updateTab(activeTab.path, { version: Date.now() })}
+                  className="p-1 rounded hover:bg-white/10"
+                  title="Reload preview"
+                >
+                  <RotateCw className="w-3.5 h-3.5" />
+                </button>
+                {(isMediaKind(activeTab.kind) || activeTab.kind === 'html' || activeTab.kind === 'svg') && previewUrl(activeTab.path, undefined, platform.previewBase) && (
+                  <button
+                    onClick={() => window.open(previewUrl(activeTab.path, activeTab.version, platform.previewBase)!, '_blank')}
+                    className="p-1 rounded hover:bg-white/10"
+                    title="Open in browser"
+                  >
+                    <Globe className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={() => api.files.openExternal(activeTab.path).catch(() => {})}
+                  className="p-1 rounded hover:bg-white/10"
+                  title="Open in default app"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => api.files.openExternal(activeTab.path, true).catch(() => {})}
+                  className="p-1 rounded hover:bg-white/10"
+                  title="Show in file manager"
+                >
+                  <FolderOpenIcon className="w-3.5 h-3.5" />
+                </button>
                 <span>{formatSize(activeTab.size)}</span>
               </div>
             </div>
 
-            {isMarkdown && activeTab.viewMode === 'preview' ? (
+            {activeTab.binary && !isMediaKind(activeTab.kind) ? (
+              <PreviewUnavailable path={activeTab.path} message="This is a binary file and can't be shown as text." />
+            ) : isMediaKind(activeTab.kind) || (activeTab.viewMode === 'preview' && hasSourceView(activeTab.kind) && !isMarkdown) ? (
+              <FilePreview
+                path={activeTab.path}
+                kind={activeTab.kind}
+                extension={activeTab.extension}
+                content={activeTab.editedContent}
+                version={activeTab.version}
+              />
+            ) : isMarkdown && activeTab.viewMode === 'preview' ? (
               <div
                 className="flex-1 overflow-auto p-6 prose-invert"
                 style={{ color: 'var(--text-primary)' }}
               >
                 <div className="markdown-preview">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    urlTransform={(url, key) => {
+                      // Relative images (e.g. ![](screenshot.png)) load from next to the .md file
+                      if (key === 'src' && !/^[a-z][a-z0-9+.-]*:|^\/\/|^#/i.test(url)) {
+                        const dir = parentDir(activeTab.path);
+                        let rel = url;
+                        try { rel = decodeURI(url); } catch { /* keep as written */ }
+                        const local = previewUrl(dir ? joinPath(dir, rel) : rel, activeTab.version, platform.previewBase);
+                        if (local) return local;
+                      }
+                      return url;
+                    }}
+                  >
                     {activeTab.editedContent}
                   </ReactMarkdown>
                 </div>

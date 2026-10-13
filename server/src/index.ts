@@ -40,6 +40,7 @@ import { installDefaultAgents } from './data/default-agents.js';
 import { IS_WIN, tempPath, toClientPath } from './utils/platform.js';
 import { openUrl, openFolder, openTerminalAt, scheduleRelaunch } from './utils/win-shell.js';
 import { defaultShell } from './winmux/command.js';
+import { startPreviewServer, getPreviewBase, getPreviewPort } from './services/preview-server.js';
 import { homedir } from 'os';
 const TIMING_LOG = tempPath('octoally-timing.log');
 const tlog = (s: string) => { try { appendFileSync(TIMING_LOG, `[${new Date().toISOString()}] ${s}\n`); } catch {} };
@@ -139,6 +140,11 @@ async function start() {
         (exposed && parsed.host === host)
       );
       if (!ok) return reply.status(403).send({ error: 'Forbidden origin' });
+      // Pages shown in the file viewer's preview must not be able to drive the API.
+      const previewPort = getPreviewPort();
+      if (previewPort && parsed && parsed.port === String(previewPort)) {
+        return reply.status(403).send({ error: 'Forbidden origin' });
+      }
     }
   });
 
@@ -327,6 +333,7 @@ async function start() {
       platform: process.platform,
       home: toClientPath(homedir()),
       drivesRoot: IS_WIN ? '::drives' : null,
+      previewBase: getPreviewBase(),
       shell: IS_WIN ? defaultShell().name : (process.env.SHELL || '/bin/bash'),
       updateCommand,
     };
@@ -408,6 +415,9 @@ async function start() {
       return reply.sendFile('index.html');
     });
   }
+
+  // File-viewer preview server (own port = own origin; see services/preview-server.ts)
+  await startPreviewServer(parseInt(process.env.OCTOALLY_PREVIEW_PORT || '', 10) || config.port + 2);
 
   // Start
   t = Date.now();

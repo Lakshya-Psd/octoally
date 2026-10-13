@@ -422,6 +422,8 @@ export function SessionView({ sessionId, projectPath, projectId: _projectId, onE
                 hideCursor
                 onExit={term.id === sessionId && onExit ? () => onExit() : undefined}
                 onReconnect={() => reconnectTerminal(term.id)}
+                projectPath={projectPath}
+                onOpenFile={handleOpenInExplorer}
               />
             </div>
           ))}

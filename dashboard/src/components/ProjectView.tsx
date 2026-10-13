@@ -1600,6 +1600,8 @@ export function ProjectView({ projectId, projectPath, projectName: _projectName,
                               cliType={sessionLookup.get(term.id)?.cli_type as 'claude' | 'codex' | undefined}
                               onReconnect={() => reconnectTerminal(term.id)}
                               onPopOut={() => closeTerminalTab(term.id)}
+                              projectPath={projectPath}
+                              onOpenFile={handleOpenInExplorer}
                             />
                           )}
                         </div>

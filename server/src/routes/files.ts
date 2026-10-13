@@ -1,7 +1,8 @@
 import { FastifyPluginAsync } from 'fastify';
-import { readdir, stat, readFile, writeFile, rm, rename, cp } from 'fs/promises';
+import { readdir, stat, readFile, writeFile, rm, rename, cp, open } from 'fs/promises';
+import { win32 } from 'path';
 import { join, resolve, extname, dirname, basename, isInside } from '../utils/xpath.js';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 
 interface FileEntry {
   name: string;
@@ -10,7 +11,91 @@ interface FileEntry {
   extension: string;
 }
 
+/** A NUL byte in the first 8 KB means binary (same heuristic as git). */
+async function looksBinary(filePath: string): Promise<boolean> {
+  let handle;
+  try {
+    handle = await open(filePath, 'r');
+    const buf = Buffer.alloc(8192);
+    const { bytesRead } = await handle.read(buf, 0, buf.length, 0);
+    return buf.subarray(0, bytesRead).includes(0);
+  } catch {
+    return false;
+  } finally {
+    await handle?.close();
+  }
+}
+
+/** Open a file with its default app, or show it selected in the OS file manager. */
+function launchForFile(filePath: string, mode: 'open' | 'reveal'): Promise<void> {
+  return new Promise((resolvePromise, rejectPromise) => {
+    let file: string;
+    let args: string[];
+    let verbatim = false;
+    if (process.platform === 'win32') {
+      const native = win32.normalize(filePath);
+      file = 'explorer.exe';
+      if (mode === 'reveal') {
+        args = [`/select,"${native}"`];
+        verbatim = true;
+      } else {
+        args = [native];
+      }
+    } else if (process.platform === 'darwin') {
+      file = 'open';
+      args = mode === 'reveal' ? ['-R', filePath] : [filePath];
+    } else {
+      file = 'xdg-open';
+      args = [mode === 'reveal' ? dirname(filePath) : filePath];
+    }
+    // windowsHide: false — this launches a visible app (overrides the server-wide default).
+    const child = spawn(file, args, { detached: true, stdio: 'ignore', windowsHide: false, windowsVerbatimArguments: verbatim });
+    child.once('error', rejectPromise);
+    child.once('spawn', () => { child.unref(); resolvePromise(); });
+  });
+}
+
 export const fileRoutes: FastifyPluginAsync = async (app) => {
+  // File metadata (used by the viewer to auto-refresh previews and by terminal file links)
+  app.get<{
+    Querystring: { path: string };
+  }>('/files/stat', async (req, reply) => {
+    if (!req.query.path) return reply.status(400).send({ error: 'path query parameter is required' });
+    const resolved = resolve(req.query.path);
+    try {
+      const s = await stat(resolved);
+      return {
+        exists: true,
+        path: resolved,
+        type: s.isDirectory() ? 'directory' : 'file',
+        size: s.size,
+        mtimeMs: s.mtimeMs,
+      };
+    } catch {
+      return { exists: false, path: resolved };
+    }
+  });
+
+  // Open a file in its default app (Photos, video player, browser, PDF reader ...)
+  app.post<{
+    Body: { path: string; reveal?: boolean };
+  }>('/files/open', async (req, reply) => {
+    const { path: target, reveal } = req.body || {} as any;
+    if (!target) return reply.status(400).send({ error: 'path is required' });
+    const resolved = resolve(target);
+    try {
+      await stat(resolved);
+    } catch {
+      return reply.status(404).send({ error: 'File not found' });
+    }
+    try {
+      await launchForFile(resolved, reveal ? 'reveal' : 'open');
+      return { ok: true };
+    } catch (err: any) {
+      return reply.status(500).send({ error: `Failed to open: ${err?.message ?? err}` });
+    }
+  });
+
   // List directory contents
   app.get<{
     Querystring: { path: string; showHidden?: string };
@@ -70,15 +155,20 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
 
     try {
       const stats = await stat(resolved);
+      const ext = extname(resolved).slice(1);
+      // Binary files (images, video, archives ...) aren't text — the viewer
+      // previews them through the preview server instead of the editor.
+      if (await looksBinary(resolved)) {
+        return { path: resolved, content: '', extension: ext, size: stats.size, binary: true, mtimeMs: stats.mtimeMs };
+      }
       // Limit to 1MB files
       if (stats.size > 1024 * 1024) {
         return reply.status(413).send({ error: 'File too large (max 1MB)' });
       }
 
       const content = await readFile(resolved, 'utf-8');
-      const ext = extname(resolved).slice(1);
 
-      return { path: resolved, content, extension: ext, size: stats.size };
+      return { path: resolved, content, extension: ext, size: stats.size, mtimeMs: stats.mtimeMs };
     } catch (err: any) {
       if (err.code === 'ENOENT') return reply.status(404).send({ error: 'File not found' });
       return reply.status(500).send({ error: 'Failed to read file' });

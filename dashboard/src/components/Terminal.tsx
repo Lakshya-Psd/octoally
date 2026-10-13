@@ -8,7 +8,8 @@ import { RotateCcw, ExternalLink, ZoomIn, ZoomOut } from 'lucide-react';
 import { useSpeechStore } from '../lib/speech';
 import { isKeyboardNavActive } from '../lib/shortcuts';
 import { api } from '../lib/api';
-import { isWindowsClient } from '../lib/platform';
+import { isWindowsClient, getPlatformSync } from '../lib/platform';
+import { registerFileLinks } from '../lib/terminal-file-links';
 import { HistoryViewer } from './HistoryViewer';
 import '@xterm/xterm/css/xterm.css';
 
@@ -49,9 +50,18 @@ interface TerminalProps {
   onExit?: (exitCode: number) => void;
   onReconnect?: () => void;
   onPopOut?: () => void;
+  /** Project folder, for resolving relative file paths printed in the terminal. */
+  projectPath?: string;
+  /** Called when a file path in the output is clicked (opens it in the file viewer). */
+  onOpenFile?: (path: string) => void;
 }
 
-export function Terminal({ sessionId, visible = true, suspended = false, passiveResize = false, hideCursor = false, cliType, onExit, onReconnect, onPopOut }: TerminalProps) {
+export function Terminal({ sessionId, visible = true, suspended = false, passiveResize = false, hideCursor = false, cliType, onExit, onReconnect, onPopOut, projectPath, onOpenFile }: TerminalProps) {
+  // Latest values for the file-link provider, which is registered once per terminal.
+  const projectPathRef = useRef(projectPath);
+  projectPathRef.current = projectPath;
+  const onOpenFileRef = useRef(onOpenFile);
+  onOpenFileRef.current = onOpenFile;
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -204,6 +214,17 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
         }).catch(e => console.error('[octoally] open-url failed:', e));
       }
     }));
+
+    // Make file paths in the output clickable — open them in the file viewer
+    // (or the default app when this terminal has no viewer, e.g. the grid).
+    registerFileLinks(term, {
+      getProjectPath: () => projectPathRef.current,
+      isWindows: () => getPlatformSync().platform === 'win32',
+      onOpen: (path) => {
+        if (onOpenFileRef.current) onOpenFileRef.current(path);
+        else api.files.openExternal(path).catch(() => {});
+      },
+    });
 
     // Fit after a small delay to ensure container is sized
     requestAnimationFrame(() => {

@@ -119,9 +119,19 @@ export const api = {
     list: (path: string, showHidden?: boolean) =>
       fetchJSON<{ path: string; files: FileEntry[] }>(`/files?path=${encodeURIComponent(path)}${showHidden ? '&showHidden=true' : ''}`),
     read: (path: string) =>
-      fetchJSON<{ path: string; content: string; extension: string; size: number }>(
+      fetchJSON<{ path: string; content: string; extension: string; size: number; binary?: boolean; mtimeMs?: number }>(
         `/files/read?path=${encodeURIComponent(path)}`
       ),
+    stat: (path: string) =>
+      fetchJSON<{ exists: boolean; path: string; type?: 'file' | 'directory'; size?: number; mtimeMs?: number }>(
+        `/files/stat?path=${encodeURIComponent(path)}`
+      ),
+    /** Open with the OS default app, or (reveal) show it selected in the file manager. */
+    openExternal: (path: string, reveal = false) =>
+      fetchJSON<{ ok: boolean }>('/files/open', {
+        method: 'POST',
+        body: JSON.stringify({ path, reveal }),
+      }),
     write: (path: string, content: string) =>
       fetchJSON<{ ok: boolean; size: number }>('/files/write', {
         method: 'PUT',
@@ -379,6 +389,8 @@ export interface PlatformInfo {
   home: string;
   /** `'::drives'` on Windows (virtual "This PC" drive list), null elsewhere. */
   drivesRoot: string | null;
+  /** Base URL of the file-preview server (own origin), e.g. http://127.0.0.1:42012 */
+  previewBase?: string | null;
   shell: string;
   updateCommand: string;
 }

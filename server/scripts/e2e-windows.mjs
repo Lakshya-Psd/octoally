@@ -6,7 +6,7 @@
 // Runs the compiled server (npm run build first) on port 42099 with a throwaway
 // home directory, so your real ~/.claude and ~/.octoally are not touched.
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -101,6 +101,25 @@ try {
   check('browse ::drives lists C:/', drives.body.dirs?.some((d) => d.path === 'C:/'), JSON.stringify(drives.body.dirs?.map((d) => d.path)));
   const croot = await api('GET', '/browse?path=C:/');
   check('browse C:/ has parent ::drives', croot.body.parent === '::drives' && croot.body.path === 'C:/', `${croot.body.path} parent=${croot.body.parent}`);
+
+  // File-viewer preview server (own origin) + file endpoints
+  const pb = plat.body.previewBase;
+  check('preview server advertised', /^http:\/\/127\.0\.0\.1:\d+$/.test(pb || ''), String(pb));
+  const previewSample = join(home, 'preview sample.txt');
+  writeFileSync(previewSample, 'x'.repeat(1000));
+  const sampleUrl = `${pb}/${previewSample.replace(/\\/g, '/').split('/').map((s, i) => (i === 0 ? s : encodeURIComponent(s))).join('/')}`;
+  const full = await fetch(sampleUrl);
+  check('preview serves a file (path with a space)', full.status === 200 && (await full.text()).length === 1000, String(full.status));
+  const part = await fetch(sampleUrl, { headers: { Range: 'bytes=10-19' } });
+  check('preview supports range requests (video seeking)', part.status === 206 && (await part.text()).length === 10, String(part.status));
+  const blocked = await fetch(`${BASE}/api/sessions`, { headers: { Origin: pb } });
+  check('API refuses requests from previewed pages', blocked.status === 403, String(blocked.status));
+  const st = await api('GET', `/files/stat?path=${encodeURIComponent(previewSample)}`);
+  check('files/stat', st.body.exists === true && st.body.size === 1000, JSON.stringify(st.body));
+  const binFile = join(home, 'blob.dat');
+  writeFileSync(binFile, Buffer.from([1, 0, 2, 3]));
+  const rb = await api('GET', `/files/read?path=${encodeURIComponent(binFile)}`);
+  check('binary files are flagged, not shown as text', rb.body.binary === true, JSON.stringify(rb.body).slice(0, 120));
 
   // 1. Terminal session
   const s1 = await api('POST', '/sessions', { project_path: project.path, project_id: project.id, mode: 'terminal', task: 'Terminal' });
