@@ -4,6 +4,8 @@ import { api, type Project, type RufloAgent } from '../lib/api';
 import { Play, Loader2, Bot, TerminalSquare, Globe, Users, X, FolderOpen, GitBranch, Cpu, Activity, FileText, Zap } from 'lucide-react';
 import { ClaudeIcon, CodexIcon } from './CliIcons';
 import { SessionMicButton } from './SessionMicButton';
+import { shortenHome } from '../lib/paths';
+import { usePlatform } from '../lib/platform';
 
 interface SessionLauncherProps {
   project: Project;
@@ -270,6 +272,7 @@ export function SessionLauncher({ project, onSessionCreated, onWebPageCreated }:
   const [webUrl, setWebUrl] = useState('');
   const [launchMode, setLaunchMode] = useState<LaunchMode>(null);
   const queryClient = useQueryClient();
+  const { home } = usePlatform();
 
   // Fetch available agent types for this project (reads .claude/agents/ — standard Claude Code feature)
   const { data: agentsData } = useQuery({
@@ -379,7 +382,7 @@ export function SessionLauncher({ project, onSessionCreated, onWebPageCreated }:
                 <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Path</span>
               </div>
               <p className="text-xs font-mono truncate" style={{ color: 'var(--text-primary)' }} title={project.path}>
-                {project.path.replace(/^\/home\/[^/]+/, '~')}
+                {shortenHome(project.path, home)}
               </p>
             </div>
             <div

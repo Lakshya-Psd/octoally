@@ -266,6 +266,8 @@ export const api = {
     fetchJSON<{ ok: boolean }>('/open-terminal', { method: 'POST', body: JSON.stringify({ path }) }),
   versionCheck: () =>
     fetchJSON<{ current: string; latest: string; name: string; url: string; prerelease: boolean; channel: string; updateAvailable: boolean }>('/version-check'),
+  updateCommand: () => fetchJSON<{ command: string }>('/update-command'),
+  platform: () => fetchJSON<PlatformInfo>('/platform'),
 };
 
 // Types
@@ -371,7 +373,18 @@ export interface DevcortexStatusResponse {
   statuses: Record<string, DevcortexProjectStatus>;
 }
 
+/** Server OS info. Paths use forward slashes on every platform. */
+export interface PlatformInfo {
+  platform: 'win32' | 'linux' | 'darwin' | string;
+  home: string;
+  /** `'::drives'` on Windows (virtual "This PC" drive list), null elsewhere. */
+  drivesRoot: string | null;
+  shell: string;
+  updateCommand: string;
+}
+
 export interface BrowseResult {
+  /** A directory path, or the `'::drives'` virtual root on Windows. */
   path: string;
   parent: string | null;
   folderName: string;

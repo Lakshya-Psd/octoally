@@ -30,12 +30,15 @@ import {
   TerminalSquare,
   Search,
   AlertTriangle,
+  HardDrive,
 } from 'lucide-react';
 import { ClaudeIcon, CodexIcon } from './CliIcons';
 import { ConfirmModal } from './ConfirmModal';
 import { RufloDeprecationModal } from './RufloDeprecationModal';
 import { StatuslinePromptModal } from './StatuslinePromptModal';
 import { useShortcut } from '../lib/shortcuts';
+import { baseName, isAbsolutePath, isDrivesRoot, isStrictSubPath, joinPath, normalizePath, pathEquals } from '../lib/paths';
+import { examplePath, useIsWindows, usePlatform } from '../lib/platform';
 
 interface ProjectDashboardProps {
   onOpenProject: (projectId: string, projectName: string, quickLaunch?: 'session' | 'agent' | 'terminal', cliType?: 'claude' | 'codex') => void;
@@ -47,11 +50,15 @@ type ViewState = { mode: 'list' } | { mode: 'add' } | { mode: 'edit'; project: P
 
 function FolderBrowser({ onSelect }: { onSelect: (path: string, folderName: string) => void }) {
   const [browsePath, setBrowsePath] = useState<string | undefined>(undefined);
+  const isWindows = useIsWindows();
 
   const { data, isLoading } = useQuery({
     queryKey: ['browse', browsePath],
     queryFn: () => api.projects.browse(browsePath),
   });
+
+  // Windows: `::drives` is the virtual "This PC" drive list — not a selectable folder.
+  const atDrives = isDrivesRoot(data?.path);
 
   return (
     <div
@@ -71,12 +78,13 @@ function FolderBrowser({ onSelect }: { onSelect: (path: string, folderName: stri
             <ArrowUp className="w-3.5 h-3.5" />
           </button>
         )}
-        <span className="truncate font-mono">{data?.path || '~'}</span>
+        <span className="truncate font-mono">{atDrives ? 'This PC' : data?.path || (isWindows ? 'Home' : '~')}</span>
         <button
           onClick={() => {
-            if (data?.path) onSelect(data.path, data.folderName);
+            if (data?.path && !atDrives) onSelect(data.path, data.folderName);
           }}
-          className="ml-auto px-2 py-1 rounded text-xs font-medium shrink-0"
+          disabled={atDrives}
+          className="ml-auto px-2 py-1 rounded text-xs font-medium shrink-0 disabled:opacity-40"
           style={{ background: 'var(--accent)', color: 'white' }}
         >
           Select This Folder
@@ -100,7 +108,9 @@ function FolderBrowser({ onSelect }: { onSelect: (path: string, folderName: stri
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-white/5 text-left"
               style={{ color: 'var(--text-primary)' }}
             >
-              <FolderOpen className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />
+              {atDrives
+                ? <HardDrive className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />
+                : <FolderOpen className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />}
               <span className="truncate">{dir.name}</span>
               {dir.hasChildren && (
                 <ChevronRight className="w-3 h-3 ml-auto shrink-0" style={{ color: 'var(--text-secondary)' }} />
@@ -113,17 +123,9 @@ function FolderBrowser({ onSelect }: { onSelect: (path: string, folderName: stri
   );
 }
 
+/** Folder name used to auto-fill the project name (`C:\x\proj\` → `proj`). */
 function prevFolderName(path: string): string {
-  const parts = path.replace(/\/+$/, '').split('/');
-  return parts[parts.length - 1] || '';
-}
-
-/** Strip trailing slashes / whitespace so a typed `/home/x/repos/` compares and saves
- *  the same as the picker's `/home/x/repos`. Mirrors the server's normalizeProjectPath. */
-function normalizePath(path: string): string {
-  const trimmed = (path || '').trim();
-  if (trimmed === '/' || trimmed === '') return trimmed;
-  return trimmed.replace(/\/+$/, '');
+  return baseName(path);
 }
 
 const inputStyle = {
@@ -146,6 +148,8 @@ function ProjectForm({
   onCancel: () => void;
 }) {
   const queryClient = useQueryClient();
+  const platform = usePlatform();
+  const isWindows = platform.platform === 'win32';
 
   const [name, setName] = useState(project?.name || '');
   const [path, setPath] = useState(project?.path || '');
@@ -172,7 +176,7 @@ function ProjectForm({
   // Load CLAUDE.md (edit mode only)
   const claudeMdQuery = useQuery({
     queryKey: ['file-read', projectPath, 'CLAUDE.md'],
-    queryFn: () => api.files.read(`${projectPath}/CLAUDE.md`),
+    queryFn: () => api.files.read(joinPath(projectPath, 'CLAUDE.md')),
     enabled: !!projectPath && mode === 'edit',
     retry: false,
   });
@@ -180,7 +184,7 @@ function ProjectForm({
   // Load AGENTS.md (edit mode only — Codex config)
   const agentsMdQuery = useQuery({
     queryKey: ['file-read', projectPath, 'AGENTS.md'],
-    queryFn: () => api.files.read(`${projectPath}/AGENTS.md`),
+    queryFn: () => api.files.read(joinPath(projectPath, 'AGENTS.md')),
     enabled: !!projectPath && mode === 'edit',
     retry: false,
   });
@@ -188,7 +192,7 @@ function ProjectForm({
   // Load .claude/settings.json (edit mode only)
   const settingsQuery = useQuery({
     queryKey: ['file-read', projectPath, '.claude/settings.json'],
-    queryFn: () => api.files.read(`${projectPath}/.claude/settings.json`),
+    queryFn: () => api.files.read(joinPath(projectPath, '.claude/settings.json')),
     enabled: !!projectPath && mode === 'edit',
     retry: false,
   });
@@ -226,7 +230,7 @@ function ProjectForm({
 
   const createMutation = useMutation({
     mutationFn: () =>
-      api.projects.create({ name, path, description, default_web_url: defaultWebUrl || undefined, color: projectColor || undefined }),
+      api.projects.create({ name, path: normalizePath(path), description, default_web_url: defaultWebUrl || undefined, color: projectColor || undefined }),
     onSuccess: async (data) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       onSubmit();
@@ -261,10 +265,10 @@ function ProjectForm({
       // Write any edited files to the (possibly repointed) path, not the stale one.
       const savePath = normalizePath(path) || project!.path;
       try {
-        if (claudeMd !== initialClaudeMd) await api.files.write(`${savePath}/CLAUDE.md`, claudeMd);
-        if (agentsMd !== initialAgentsMd) await api.files.write(`${savePath}/AGENTS.md`, agentsMd);
+        if (claudeMd !== initialClaudeMd) await api.files.write(joinPath(savePath, 'CLAUDE.md'), claudeMd);
+        if (agentsMd !== initialAgentsMd) await api.files.write(joinPath(savePath, 'AGENTS.md'), agentsMd);
         if (settingsJson !== initialSettingsJson)
-          await api.files.write(`${savePath}/.claude/settings.json`, settingsJson);
+          await api.files.write(joinPath(savePath, '.claude/settings.json'), settingsJson);
       } catch {
         // best-effort file writes
       }
@@ -308,7 +312,7 @@ function ProjectForm({
   // Auto-set repo name and owner when path changes
   useEffect(() => {
     if (projectPath) {
-      const folder = projectPath.split('/').pop() || '';
+      const folder = baseName(projectPath);
       if (!repoName) setRepoName(folder);
     }
   }, [projectPath, repoName]);
@@ -341,14 +345,17 @@ function ProjectForm({
     retry: false,
   });
 
-  const pathChanged = mode === 'edit' && editingPath !== normalizePath(project!.path);
+  const pathChanged = mode === 'edit' && !pathEquals(editingPath, project!.path);
   const pathWarnings: string[] = [];
   if (editingPath) {
-    if (!editingPath.startsWith('/')) pathWarnings.push('Path is not absolute — it should start with "/".');
+    if (!isAbsolutePath(editingPath))
+      pathWarnings.push(isWindows
+        ? 'Path is not absolute — it should start with a drive like "C:/".'
+        : 'Path is not absolute — it should start with "/".');
     if (pathExistsQuery.data === false) pathWarnings.push("This folder doesn't exist on disk yet.");
-    if (otherProjects.some((p) => normalizePath(p.path) === editingPath))
+    if (otherProjects.some((p) => pathEquals(p.path, editingPath)))
       pathWarnings.push('Another project already points at this exact folder.');
-    else if (otherProjects.some((p) => normalizePath(p.path).startsWith(editingPath + '/')))
+    else if (otherProjects.some((p) => isStrictSubPath(p.path, editingPath)))
       pathWarnings.push("This is a parent of another project's folder — sessions may open in the wrong place.");
   }
 
@@ -392,7 +399,7 @@ function ProjectForm({
                     // (don't clobber a manually-set name, and never in edit mode).
                     if (mode === 'add' && (!name || name === prevFolderName(path))) setName(folderName);
                   }}
-                  placeholder="/home/user/projects/myapp"
+                  placeholder={examplePath(platform)}
                   className="flex-1 px-4 py-2.5 rounded-lg border text-sm outline-none font-mono"
                   style={inputStyle}
                 />
@@ -1189,7 +1196,7 @@ function CreateRepoModal({ projectPath, onClose, onCreated }: {
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [repoName, setRepoName] = useState(projectPath.split('/').pop() || '');
+  const [repoName, setRepoName] = useState(baseName(projectPath));
   const [isPrivate, setIsPrivate] = useState(true);
   const [defaultBranch, setDefaultBranch] = useState('main');
   const [selectedOwner, setSelectedOwner] = useState('');

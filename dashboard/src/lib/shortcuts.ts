@@ -200,6 +200,10 @@ const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navig
  * time we compare against the actual event which uses `ctrl` / `meta`.
  */
 export function eventToCombo(e: KeyboardEvent): string {
+  // AltGr: Windows reports it as Ctrl+Alt, so typing AltGr characters (`@`,
+  // `{`, `€` on many European layouts) would otherwise match ctrl+alt combos.
+  // Treat any AltGraph event as "no combo" so it never fires a shortcut.
+  if (e.getModifierState?.('AltGraph')) return '';
   const parts: string[] = [];
   if (e.altKey) parts.push('alt');
   if (e.ctrlKey) parts.push('ctrl');

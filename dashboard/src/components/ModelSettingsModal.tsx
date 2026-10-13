@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Settings, Download, Check, Loader2, X, Cloud, HardDrive, Eye, EyeOff, Ear, Plus, Trash2, Sparkles, Timer, Clock } from 'lucide-react';
 import { invoke } from '../lib/tauri';
 import { useSpeechStore, downloadModel, stopMic, unloadModel, setWakePhrase, setSilenceTimeout, setMaxSpeechDuration } from '../lib/speech';
+import { isWindowsClient } from '../lib/platform';
 
 interface ModelInfo {
   installed: boolean;
@@ -29,6 +30,18 @@ const MODEL_META: Record<string, { label: string; size: string; desc: string }> 
   },
 };
 
+/** Neutral install-stage labels (stage keys come from the desktop app's
+ *  `stt://whisper-install-progress` events; the detail line shows its message). */
+const WHISPER_STAGE_LABELS: Record<string, string> = {
+  downloading: 'Downloading whisper.cpp...',
+  download: 'Downloading whisper.cpp...',
+  extracting: 'Extracting...',
+  building: 'Building whisper.cpp (this may take a minute)...',
+  build: 'Building whisper.cpp (this may take a minute)...',
+  compile: 'Building whisper.cpp (this may take a minute)...',
+  error: 'Install failed',
+};
+
 interface ModelSettingsModalProps {
   onClose: () => void;
 }
@@ -44,6 +57,11 @@ export function ModelSettingsModal({ onClose }: ModelSettingsModalProps) {
   const whisperInstallStage = useSpeechStore((s) => s.whisperInstallStage);
   const whisperInstallPercent = useSpeechStore((s) => s.whisperInstallPercent);
   const whisperInstallMessage = useSpeechStore((s) => s.whisperInstallMessage);
+  // Headline for the install card. Unknown stages fall back to the event's
+  // own message (the desktop app may download a prebuilt binary or build it).
+  const whisperStageLabel = whisperInstallStage
+    ? WHISPER_STAGE_LABELS[whisperInstallStage] ?? (whisperInstallMessage || 'Installing whisper.cpp...')
+    : '';
   const [downloadingModel, setDownloadingModel] = useState<string | null>(null);
 
   // Snapshot of the "committed" backend state when modal opened
@@ -469,13 +487,10 @@ export function ModelSettingsModal({ onClose }: ModelSettingsModalProps) {
                   className="text-[11px] font-medium"
                   style={{ color: whisperInstallStage === 'error' ? 'var(--error)' : 'var(--text-primary)' }}
                 >
-                  {whisperInstallStage === 'downloading' && 'Downloading whisper.cpp source...'}
-                  {whisperInstallStage === 'extracting' && 'Extracting source...'}
-                  {whisperInstallStage === 'building' && 'Compiling whisper.cpp (this may take a minute)...'}
-                  {whisperInstallStage === 'error' && 'Install failed'}
+                  {whisperStageLabel}
                 </span>
               </div>
-              {whisperInstallMessage && (
+              {whisperInstallMessage && whisperInstallMessage !== whisperStageLabel && (
                 <p className="text-[10px]" style={{ color: 'var(--text-secondary)' }}>
                   {whisperInstallMessage}
                 </p>
@@ -939,6 +954,7 @@ function VoiceCommandsSection() {
     <div className="space-y-3">
       <p className="text-[11px] leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
         Voice commands are triggered after the wake phrase is detected. Edit trigger phrases or add custom shell commands below.
+        {isWindowsClient && ' Custom commands run in PowerShell on Windows.'}
       </p>
 
       {/* Smart command matching */}
@@ -1106,7 +1122,7 @@ function VoiceCommandsSection() {
                         onChange={(e) => updateCommand(cmd.id, {
                           action: { ...cmd.action, command: e.target.value },
                         })}
-                        placeholder="Shell command"
+                        placeholder={isWindowsClient ? 'Shell command (PowerShell on Windows)' : 'Shell command'}
                         className="w-full px-1.5 py-1 rounded text-[10px] font-mono outline-none"
                         style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
                       />
@@ -1155,7 +1171,7 @@ function VoiceCommandsSection() {
                   type="text"
                   value={newCommandScript}
                   onChange={(e) => setNewCommandScript(e.target.value)}
-                  placeholder="Shell command or script"
+                  placeholder={isWindowsClient ? 'Shell command or script (PowerShell on Windows)' : 'Shell command or script'}
                   className="w-full px-1.5 py-1 rounded text-[10px] font-mono outline-none"
                   style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
                 />

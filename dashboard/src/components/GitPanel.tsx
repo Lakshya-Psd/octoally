@@ -21,6 +21,7 @@ import {
   FolderTree,
 } from 'lucide-react';
 import { api, type GitFileStatus, type GitCommit, type CommitFile, type GitBranch as GitBranchInfo } from '../lib/api';
+import { joinPath } from '../lib/paths';
 import {
   parseHunks,
   filterDiffToFile,
@@ -295,7 +296,7 @@ export function GitPanel({ projectPath, isVisible, onFileSaved, onOpenInExplorer
 
   // Determine the full file path for editing (only for working tree diffs, not commits)
   const isEditable = detail?.type === 'diff' && !detail.staged;
-  const editFilePath = detail?.type === 'diff' ? `${projectPath}/${detail.path}` : undefined;
+  const editFilePath = detail?.type === 'diff' ? joinPath(projectPath, detail.path) : undefined;
 
   return (
     <div ref={containerRef} className="h-full flex">
@@ -413,7 +414,7 @@ export function GitPanel({ projectPath, isVisible, onFileSaved, onOpenInExplorer
             <FileSection title="Staged" count={staged.length} open={stagedOpen} onToggle={() => setStagedOpen(!stagedOpen)}
               headerActions={<button onClick={() => handleUnstage(staged.map(f => f.file.path))} title="Unstage all" className="p-0.5 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><Minus className="w-3 h-3" /></button>}>
               {staged.map(f => <FileRow key={`s-${f.file.path}`} path={f.file.path} status={f.statusChar} isActive={detail?.type === 'diff' && detail.path === f.file.path && detail.staged} onClick={() => handleViewDiff(f.file.path, true)}
-                onReveal={onOpenInExplorer ? () => onOpenInExplorer(`${projectPath.replace(/\/$/, '')}/${f.file.path}`) : undefined}
+                onReveal={onOpenInExplorer ? () => onOpenInExplorer(joinPath(projectPath, f.file.path)) : undefined}
                 actions={<button onClick={e => { e.stopPropagation(); handleUnstage([f.file.path]); }} title="Unstage" className="p-0.5 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><Minus className="w-3 h-3" /></button>} />)}
             </FileSection>
           )}
@@ -422,7 +423,7 @@ export function GitPanel({ projectPath, isVisible, onFileSaved, onOpenInExplorer
               headerActions={<><button onClick={() => handleStage(changed.map(f => f.file.path))} title="Stage all" className="p-0.5 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><Plus className="w-3 h-3" /></button><button onClick={() => handleDiscard(changed.map(f => f.file.path))} title="Discard all" className="p-0.5 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><Undo2 className="w-3 h-3" /></button></>}>
               {changed.map(f => <FileRow key={`c-${f.file.path}`} path={f.file.path} status={f.statusChar} isActive={detail?.type === 'diff' && detail.path === f.file.path && !detail.staged} onClick={() => handleViewDiff(f.file.path, false)}
                 selected={selectedFiles.has(f.file.path)} onSelect={() => toggleFileSelect(f.file.path)}
-                onReveal={onOpenInExplorer ? () => onOpenInExplorer(`${projectPath.replace(/\/$/, '')}/${f.file.path}`) : undefined}
+                onReveal={onOpenInExplorer ? () => onOpenInExplorer(joinPath(projectPath, f.file.path)) : undefined}
                 actions={<><button onClick={e => { e.stopPropagation(); handleStage([f.file.path]); }} title="Stage" className="p-0.5 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><Plus className="w-3 h-3" /></button><button onClick={e => { e.stopPropagation(); handleDiscard([f.file.path]); }} title="Discard" className="p-0.5 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><Undo2 className="w-3 h-3" /></button></>} />)}
             </FileSection>
           )}
@@ -431,7 +432,7 @@ export function GitPanel({ projectPath, isVisible, onFileSaved, onOpenInExplorer
               headerActions={<button onClick={() => handleStage(untracked.map(f => f.file.path))} title="Stage all" className="p-0.5 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><Plus className="w-3 h-3" /></button>}>
               {untracked.map(f => <FileRow key={`u-${f.file.path}`} path={f.file.path} status="?" isActive={false} onClick={() => handleViewDiff(f.file.path, false)}
                 selected={selectedFiles.has(f.file.path)} onSelect={() => toggleFileSelect(f.file.path)}
-                onReveal={onOpenInExplorer ? () => onOpenInExplorer(`${projectPath.replace(/\/$/, '')}/${f.file.path}`) : undefined}
+                onReveal={onOpenInExplorer ? () => onOpenInExplorer(joinPath(projectPath, f.file.path)) : undefined}
                 actions={<button onClick={e => { e.stopPropagation(); handleStage([f.file.path]); }} title="Stage" className="p-0.5 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><Plus className="w-3 h-3" /></button>} />)}
             </FileSection>
           )}
@@ -517,7 +518,7 @@ export function GitPanel({ projectPath, isVisible, onFileSaved, onOpenInExplorer
                 <ToggleBtn active={ignoreWhitespace} onClick={() => setIgnoreWhitespace(!ignoreWhitespace)} title={ignoreWhitespace ? 'Ignoring whitespace' : 'Showing all changes'}><Space className="w-3.5 h-3.5" /></ToggleBtn>
                 <div className="w-px h-4 mx-0.5" style={{ background: 'var(--border)' }} />
                 {onOpenInExplorer && detail.type === 'diff' && (
-                  <button onClick={() => onOpenInExplorer(`${projectPath.replace(/\/$/, '')}/${detail.path}`)} title="Reveal in file explorer" className="p-1 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><FolderTree className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => onOpenInExplorer(joinPath(projectPath, detail.path))} title="Reveal in file explorer" className="p-1 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><FolderTree className="w-3.5 h-3.5" /></button>
                 )}
                 <button onClick={() => setDetail(null)} className="p-1 rounded hover:bg-white/10" style={{ color: 'var(--text-secondary)' }}><X className="w-3.5 h-3.5" /></button>
               </div>

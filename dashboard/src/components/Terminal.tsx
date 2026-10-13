@@ -8,6 +8,7 @@ import { RotateCcw, ExternalLink, ZoomIn, ZoomOut } from 'lucide-react';
 import { useSpeechStore } from '../lib/speech';
 import { isKeyboardNavActive } from '../lib/shortcuts';
 import { api } from '../lib/api';
+import { isWindowsClient } from '../lib/platform';
 import { HistoryViewer } from './HistoryViewer';
 import '@xterm/xterm/css/xterm.css';
 
@@ -209,11 +210,37 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       fitAddon.fit();
     });
 
+    // Single paste path for every trigger (paste event, Ctrl+Shift+V, and on
+    // Windows Ctrl+V / right-click) — `paste: true` keeps bracketed paste.
+    // Returns false when there was nothing to send (empty text / socket down).
+    const sendPaste = (text: string | undefined | null): boolean => {
+      const w = wsRef.current;
+      if (!text || !w || w.readyState !== WebSocket.OPEN) return false;
+      w.send(JSON.stringify({ type: 'input', data: text, paste: true }));
+      return true;
+    };
+    // Read the clipboard explicitly and paste it. Used where no native paste
+    // event is available (Ctrl+Shift+V keydown we cancel, right-click).
+    const pasteFromClipboard = () => {
+      navigator.clipboard?.readText().then(sendPaste).catch(() => {});
+    };
+    const canReadClipboard = typeof navigator.clipboard?.readText === 'function';
+    // Copy the current selection; false when nothing is selected.
+    const copySelection = (): boolean => {
+      const sel = term.getSelection();
+      if (!sel) return false;
+      navigator.clipboard?.writeText(sel).catch(() => {});
+      return true;
+    };
+    // Layout-aware letter match that still works on non-Latin layouts
+    // (e.g. Cyrillic `с` on the physical C key), like Windows Terminal.
+    const isLetter = (e: KeyboardEvent, letter: 'c' | 'v') =>
+      e.key.toLowerCase() === letter || (!/^[a-z]$/i.test(e.key) && e.code === `Key${letter.toUpperCase()}`);
+
     // Intercept Ctrl+Shift+C to copy selection
     term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'C' && e.type === 'keydown') {
-        const sel = term.getSelection();
-        if (sel) navigator.clipboard.writeText(sel);
+        copySelection();
         e.preventDefault();
         return false;
       }
@@ -221,16 +248,27 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       // Can't rely on browser firing a paste event — synthetic keystrokes
       // (e.g. from text expanders like espanso via xdotool) don't trigger it.
       if (e.ctrlKey && e.shiftKey && e.key === 'V' && e.type === 'keydown') {
-        navigator.clipboard.readText().then(text => {
-          if (text) {
-            const w = wsRef.current;
-            if (w && w.readyState === WebSocket.OPEN) {
-              w.send(JSON.stringify({ type: 'input', data: text, paste: true }));
-            }
-          }
-        }).catch(() => {});
+        pasteFromClipboard();
         e.preventDefault();
         return false;
+      }
+      // Windows conventions (Windows Terminal / conhost). Linux keeps Ctrl+C/V
+      // as raw ^C / ^V; Ctrl+Shift+C/V above work everywhere.
+      if (isWindowsClient && e.ctrlKey && !e.shiftKey && !e.altKey && !e.metaKey && e.type === 'keydown') {
+        // Ctrl+C with a selection copies it (and clears it) instead of sending
+        // ^C. Without a selection it falls through to xterm → ^C as usual.
+        if (isLetter(e, 'c') && term.hasSelection()) {
+          copySelection();
+          term.clearSelection();
+          e.preventDefault();
+          return false;
+        }
+        // Ctrl+V pastes text instead of sending ^V (\x16). Returning false
+        // stops xterm from emitting \x16 but leaves the browser's default
+        // action alone, so the native `paste` event reaches pasteHandler
+        // below → sendPaste (same path as Ctrl+Shift+V; no clipboard
+        // permission prompt, and exactly one paste).
+        if (isLetter(e, 'v')) return false;
       }
       return true;
     });
@@ -242,15 +280,34 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
     const pasteTarget = xtermTextarea || containerRef.current;
     const pasteHandler = (ev: Event) => {
       const ce = ev as ClipboardEvent;
-      const text = ce.clipboardData?.getData('text');
-      const w = wsRef.current;
-      if (text && w && w.readyState === WebSocket.OPEN) {
-        w.send(JSON.stringify({ type: 'input', data: text, paste: true }));
+      if (sendPaste(ce.clipboardData?.getData('text'))) {
         ce.preventDefault();
         ce.stopImmediatePropagation();
       }
     };
     pasteTarget.addEventListener('paste', pasteHandler, { capture: true });
+
+    // Windows: right-click copies the selection if there is one, otherwise
+    // pastes (Windows Terminal behaviour). The browser menu is suppressed only
+    // when we handled the click. Apps that track the mouse (e.g. TUIs with
+    // mouse mode on) keep receiving right-clicks unless Shift is held.
+    const contextTarget = containerRef.current;
+    const contextMenuHandler = (ev: MouseEvent) => {
+      if (term.hasSelection()) {
+        copySelection();
+        term.clearSelection();
+      } else if (term.modes.mouseTrackingMode !== 'none' && !ev.shiftKey) {
+        return; // the app owns mouse clicks — don't paste over it
+      } else if (canReadClipboard) {
+        pasteFromClipboard();
+      } else {
+        return; // no clipboard API (insecure context) — leave the browser menu
+      }
+      ev.preventDefault();
+      ev.stopPropagation();
+      term.focus();
+    };
+    if (isWindowsClient) contextTarget.addEventListener('contextmenu', contextMenuHandler, { capture: true });
 
     termRef.current = term;
     fitRef.current = fitAddon;
@@ -517,6 +574,7 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       pasteTarget.removeEventListener('paste', pasteHandler, { capture: true } as EventListenerOptions);
+      if (isWindowsClient) contextTarget.removeEventListener('contextmenu', contextMenuHandler, { capture: true } as EventListenerOptions);
       wsRef.current?.close();
       term.dispose();
     };

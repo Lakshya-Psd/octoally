@@ -199,7 +199,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       icon={<CodexIcon className="w-3.5 h-3.5" style={{ color: '#60a5fa' }} />}
                       value={sessionCodexCmd}
                       onChange={setSessionCodexCmd}
-                      placeholder="claude"
+                      placeholder="codex"
                     />
                   </div>
                 </div>
@@ -228,7 +228,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       icon={<CodexIcon className="w-3.5 h-3.5" style={{ color: '#ef4444' }} />}
                       value={agentCodexCmd}
                       onChange={setAgentCodexCmd}
-                      placeholder="claude"
+                      placeholder="codex"
                     />
                   </div>
                 </div>

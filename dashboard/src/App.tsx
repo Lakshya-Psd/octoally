@@ -19,6 +19,7 @@ import { initSpeechListeners } from './lib/speech';
 import { onVoiceCommand } from './lib/voice-commands';
 import type { VoiceCommandPayload } from './lib/voice-commands';
 import { installShortcutDispatcher, useShortcut, useShortcutStore, markKeyboardNav } from './lib/shortcuts';
+import { usePlatform } from './lib/platform';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -166,10 +167,23 @@ function Dashboard() {
   const projects = projectsData?.projects || [];
   const sessions = sessionsData?.sessions || [];
 
+  // The server knows the right update command for its OS (e.g. `octoally update`
+  // on Windows). Fetched up front so the copy stays inside the click gesture.
+  const platformInfo = usePlatform();
+  const { data: updateCommandData } = useQuery({
+    queryKey: ['update-command'],
+    queryFn: () => api.updateCommand(),
+    enabled: !!versionData?.updateAvailable,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+  const updateCommand = updateCommandData?.command || platformInfo.updateCommand || 'npx -y octoally@latest';
+
   // Copy update command to clipboard and show brief confirmation.
   const [updateCopied, setUpdateCopied] = useState(false);
   const triggerUpdate = useCallback(async () => {
-    const cmd = 'npx -y octoally@latest';
+    const cmd = updateCommand;
     try {
       await navigator.clipboard.writeText(cmd);
       setUpdateCopied(true);
@@ -178,7 +192,7 @@ function Dashboard() {
       // Fallback: select from prompt
       window.prompt('Copy this command and run it in your terminal:', cmd);
     }
-  }, []);
+  }, [updateCommand]);
 
   const activeSessionCount = sessions.filter(
     (s) => s.status === 'running' || s.status === 'detached'
@@ -537,6 +551,7 @@ function Dashboard() {
             </span>
             <button
               onClick={() => triggerUpdate()}
+              title={updateCommand}
               className="px-2 py-0.5 rounded text-[10px] font-medium transition-colors hover:brightness-110"
               style={{ background: 'rgba(96, 165, 250, 0.2)', color: '#60a5fa' }}
             >

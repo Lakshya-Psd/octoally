@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { Play, Loader2, Plus, FolderOpen, ChevronRight, ArrowUp, Trash2, X, Bot, Pencil, Save, TerminalSquare } from 'lucide-react';
+import { Play, Loader2, Plus, FolderOpen, ChevronRight, ArrowUp, Trash2, X, Bot, Pencil, Save, TerminalSquare, HardDrive } from 'lucide-react';
 import { AgentGuideModal } from './AgentGuide';
+import { baseName, isDrivesRoot, normalizePath } from '../lib/paths';
+import { examplePath, useIsWindows, usePlatform } from '../lib/platform';
 
 interface NewTaskFormProps {
   onSessionCreated?: (sessionId: string, projectName?: string, mode?: 'session' | 'terminal') => void;
@@ -10,11 +12,15 @@ interface NewTaskFormProps {
 
 function FolderBrowser({ onSelect }: { onSelect: (path: string, folderName: string) => void }) {
   const [browsePath, setBrowsePath] = useState<string | undefined>(undefined);
+  const isWindows = useIsWindows();
 
   const { data, isLoading } = useQuery({
     queryKey: ['browse', browsePath],
     queryFn: () => api.projects.browse(browsePath),
   });
+
+  // Windows: `::drives` is the virtual "This PC" drive list — not a selectable folder.
+  const atDrives = isDrivesRoot(data?.path);
 
   return (
     <div
@@ -35,12 +41,13 @@ function FolderBrowser({ onSelect }: { onSelect: (path: string, folderName: stri
             <ArrowUp className="w-3.5 h-3.5" />
           </button>
         )}
-        <span className="truncate font-mono">{data?.path || '~'}</span>
+        <span className="truncate font-mono">{atDrives ? 'This PC' : data?.path || (isWindows ? 'Home' : '~')}</span>
         <button
           onClick={() => {
-            if (data?.path) onSelect(data.path, data.folderName);
+            if (data?.path && !atDrives) onSelect(data.path, data.folderName);
           }}
-          className="ml-auto px-2 py-1 rounded text-xs font-medium shrink-0"
+          disabled={atDrives}
+          className="ml-auto px-2 py-1 rounded text-xs font-medium shrink-0 disabled:opacity-40"
           style={{ background: 'var(--accent)', color: 'white' }}
         >
           Select This Folder
@@ -66,7 +73,9 @@ function FolderBrowser({ onSelect }: { onSelect: (path: string, folderName: stri
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm hover:bg-white/5 text-left"
               style={{ color: 'var(--text-primary)' }}
             >
-              <FolderOpen className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />
+              {atDrives
+                ? <HardDrive className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />
+                : <FolderOpen className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} />}
               <span className="truncate">{dir.name}</span>
               {dir.hasChildren && (
                 <ChevronRight className="w-3 h-3 ml-auto shrink-0" style={{ color: 'var(--text-secondary)' }} />
@@ -91,6 +100,7 @@ export function NewTaskForm({ onSessionCreated }: NewTaskFormProps) {
   const [sessionPrompt, setSessionPrompt] = useState<string | null>(null);
   const [sessionOpenclawPrompt, setSessionOpenclawPrompt] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const platform = usePlatform();
 
   const { data: projectsData, isLoading: loadingProjects } = useQuery({
     queryKey: ['projects'],
@@ -100,7 +110,7 @@ export function NewTaskForm({ onSessionCreated }: NewTaskFormProps) {
   const projects = projectsData?.projects || [];
 
   const addProjectMutation = useMutation({
-    mutationFn: () => api.projects.create(newProject),
+    mutationFn: () => api.projects.create({ ...newProject, path: normalizePath(newProject.path) }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
       setShowAddProject(false);
@@ -540,7 +550,7 @@ export function NewTaskForm({ onSessionCreated }: NewTaskFormProps) {
                       name: (!prev.name || prev.name === prevFolderName(prev.path)) ? folderName : prev.name,
                     }));
                   }}
-                  placeholder="/home/user/projects/myapp"
+                  placeholder={examplePath(platform)}
                   className="flex-1 px-4 py-2.5 rounded-lg border text-sm outline-none font-mono"
                   style={{ background: 'var(--bg-tertiary)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
                 />
@@ -647,8 +657,7 @@ export function NewTaskForm({ onSessionCreated }: NewTaskFormProps) {
 
 /** Helper to extract folder name from a path (for auto-name detection) */
 function prevFolderName(path: string): string {
-  const parts = path.replace(/\/+$/, '').split('/');
-  return parts[parts.length - 1] || '';
+  return baseName(path);
 }
 
 import type { Project } from '../lib/api';

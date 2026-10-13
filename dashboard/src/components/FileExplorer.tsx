@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Folder, FolderOpen, File, ChevronRight, ChevronDown, ChevronUp, Loader2, Save, Circle, Eye, Pencil, Home, X, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, GitCompareArrows, FolderOpen as FolderOpenIcon, Terminal, Scissors, Copy as CopyIcon, Clipboard, Trash2, Edit3 } from 'lucide-react';
 import { api, type FileEntry } from '../lib/api';
 import { ConfirmModal } from './ConfirmModal';
+import { baseName, isSubPath, joinPath, normalizePath, parentDir, pathEquals, relativeSubPath, rootOf } from '../lib/paths';
 import {
   type HunkInfo,
   parseHunks,
@@ -392,8 +393,8 @@ function TreeItem({
 export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRequest, onFileSaved }: FileExplorerProps) {
   // Resolve initial path from persisted state or prop
   const [initialState] = useState(() => instanceId ? loadExplorerState(instanceId) : null);
-  const [currentPath, setCurrentPath] = useState(initialState?.currentPath ?? rootPath);
-  const [pathInput, setPathInput] = useState(initialState?.currentPath ?? rootPath);
+  const [currentPath, setCurrentPath] = useState(() => normalizePath(initialState?.currentPath ?? rootPath) || rootPath);
+  const [pathInput, setPathInput] = useState(() => normalizePath(initialState?.currentPath ?? rootPath) || rootPath);
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [rootLoaded, setRootLoaded] = useState(false);
   const [showHidden, setShowHidden] = useState(initialState?.showHidden ?? false);
@@ -481,16 +482,17 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
 
   // Reveal a file in the tree: expand ancestor folders and scroll to it
   async function revealFileInTree(filePath: string) {
-    if (!filePath.startsWith(currentPath)) return;
+    // Separator-boundary aware (and case-insensitive for Windows paths)
+    const relative = relativeSubPath(filePath, currentPath);
+    if (!relative) return;
 
-    const relative = filePath.slice(currentPath.length + 1);
     const parts = relative.split('/');
     parts.pop(); // remove file name — we only need directories
 
     // Expand each ancestor directory
     let dirPath = currentPath;
     for (const part of parts) {
-      dirPath = `${dirPath}/${part}`;
+      dirPath = joinPath(dirPath, part);
       const capturedDir = dirPath;
 
       try {
@@ -503,7 +505,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
           return updateNodeInTree(prev, capturedDir, {
             children: data.files.map(f => ({
               entry: f,
-              fullPath: `${capturedDir}/${f.name}`,
+              fullPath: joinPath(capturedDir, f.name),
               children: undefined,
               loaded: false,
               expanded: false,
@@ -560,7 +562,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
       const data = await api.files.read(path);
       const newTab: FileTab = {
         path: data.path,
-        name: path.split('/').pop() || path,
+        name: baseName(path) || path,
         pinned: pin,
         content: data.content,
         editedContent: data.content,
@@ -879,7 +881,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
 
       const nodes: TreeNode[] = data.files.map((f) => ({
         entry: f,
-        fullPath: `${currentPath}/${f.name}`,
+        fullPath: joinPath(currentPath, f.name),
         children: undefined,
         loaded: false,
         expanded: false,
@@ -904,7 +906,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
             const fileData = await api.files.read(path);
             restoredTabs.push({
               path: fileData.path,
-              name: path.split('/').pop() || path,
+              name: baseName(path) || path,
               pinned,
               content: fileData.content,
               editedContent: fileData.content,
@@ -928,7 +930,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
           const fileData = await api.files.read(savedState.selectedFile);
           setTabs([{
             path: fileData.path,
-            name: savedState.selectedFile.split('/').pop() || savedState.selectedFile,
+            name: baseName(savedState.selectedFile) || savedState.selectedFile,
             pinned: true,
             content: fileData.content,
             editedContent: fileData.content,
@@ -959,7 +961,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
         const data = await api.files.list(node.fullPath, showHidden);
         const children: TreeNode[] = data.files.map((f) => ({
           entry: f,
-          fullPath: `${node.fullPath}/${f.name}`,
+          fullPath: joinPath(node.fullPath, f.name),
           children: undefined,
           loaded: false,
           expanded: false,
@@ -997,7 +999,8 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
   }, [showHidden]);
 
   function navigateTo(path: string) {
-    const trimmed = path.trim().replace(/\/+$/, '') || '/';
+    // Accepts typed `C:\x\` too; drive roots stay `C:/` (never `C:`)
+    const trimmed = normalizePath(path) || rootOf(rootPath);
     setCurrentPath(trimmed);
     setPathInput(trimmed);
     // Reset tree state so loadRoot fires again
@@ -1007,7 +1010,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
   }
 
   function navigateUp() {
-    const parent = currentPath.replace(/\/[^/]+$/, '') || '/';
+    const parent = parentDir(currentPath) ?? rootOf(currentPath);
     navigateTo(parent);
   }
 
@@ -1032,7 +1035,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
               updateNodeInTree(prev, path, {
                 children: data.files.map((f) => ({
                   entry: f,
-                  fullPath: `${path}/${f.name}`,
+                  fullPath: joinPath(path, f.name),
                   children: undefined,
                   loaded: false,
                   expanded: false,
@@ -1066,9 +1069,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
   }
 
   function getParentDir(p: string): string {
-    const idx = p.lastIndexOf('/');
-    if (idx <= 0) return '/';
-    return p.slice(0, idx);
+    return parentDir(p) ?? rootOf(p);
   }
 
   // Reload one directory in the tree (or the whole root when dir === currentPath).
@@ -1087,7 +1088,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
         // Map new entries; preserve expanded/loaded/children for matching subdirs so we don't collapse the tree.
         const existingChildren = node.children ?? [];
         const newChildren: TreeNode[] = data.files.map(f => {
-          const childPath = `${dir}/${f.name}`;
+          const childPath = joinPath(dir, f.name);
           const existing = existingChildren.find(c => c.fullPath === childPath);
           if (existing && existing.entry.type === f.type) {
             return { ...existing, entry: f };
@@ -1217,8 +1218,8 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
     try {
       await api.files.delete(path);
       // Close any tab pointing at the deleted file/folder
-      setTabs(prev => prev.filter(t => t.path !== path && !t.path.startsWith(path + '/')));
-      if (activeTabPath === path || activeTabPath?.startsWith(path + '/')) setActiveTabPath(null);
+      setTabs(prev => prev.filter(t => !isSubPath(t.path, path)));
+      if (activeTabPath && isSubPath(activeTabPath, path)) setActiveTabPath(null);
       if (clipboard?.path === path) setClipboard(null);
       await refreshDirectory(getParentDir(path));
       setActionMessage({ kind: 'info', text: `Deleted ${isDir ? 'folder' : 'file'}` });
@@ -1237,20 +1238,24 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
       if (kind === 'cut') {
         await api.files.move(src, destDir);
         // Update any open tab whose path is being moved
-        const newBase = `${destDir}/${src.split('/').pop()}`;
+        const newBase = joinPath(destDir, baseName(src));
+        // `src` itself → newBase; anything under it keeps its relative tail
+        const movedPath = (p: string): string | null => {
+          const rest = relativeSubPath(p, src);
+          return rest === null ? null : rest ? joinPath(newBase, rest) : newBase;
+        };
         setTabs(prev => prev.map(t => {
-          if (t.path === src) return { ...t, path: newBase };
-          if (t.path.startsWith(src + '/')) return { ...t, path: newBase + t.path.slice(src.length) };
-          return t;
+          const moved = movedPath(t.path);
+          return moved === null ? t : { ...t, path: moved };
         }));
-        if (activeTabPath === src) setActiveTabPath(newBase);
-        else if (activeTabPath?.startsWith(src + '/')) setActiveTabPath(newBase + activeTabPath.slice(src.length));
+        const movedActive = activeTabPath ? movedPath(activeTabPath) : null;
+        if (movedActive !== null) setActiveTabPath(movedActive);
         setClipboard(null);
       } else {
         await api.files.copy(src, destDir);
       }
       // Refresh both source and destination directory views
-      if (sourceParent !== destDir) {
+      if (!pathEquals(sourceParent, destDir)) {
         await refreshDirectory(sourceParent);
       }
       await refreshDirectory(destDir);
@@ -1433,7 +1438,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
                       cursor: compareSelecting ? 'crosshair' : undefined,
                     }}
                     title={compareSelecting
-                      ? (isCompareSelected ? 'Selected for compare' : isCompareTarget ? `Compare with ${compareSelecting.split('/').pop()}` : 'Click to select')
+                      ? (isCompareSelected ? 'Selected for compare' : isCompareTarget ? `Compare with ${baseName(compareSelecting)}` : 'Click to select')
                       : tab.path}
                   >
                     {tabDirty && <Circle className="w-2 h-2 shrink-0 fill-current" style={{ color: 'var(--accent)' }} />}
@@ -1611,8 +1616,8 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
           title={pendingDelete.isDir ? 'Delete folder?' : 'Delete file?'}
           message={
             pendingDelete.isDir
-              ? `Permanently delete "${pendingDelete.path.split('/').pop()}" and all of its contents? This cannot be undone.`
-              : `Permanently delete "${pendingDelete.path.split('/').pop()}"? This cannot be undone.`
+              ? `Permanently delete "${baseName(pendingDelete.path)}" and all of its contents? This cannot be undone.`
+              : `Permanently delete "${baseName(pendingDelete.path)}"? This cannot be undone.`
           }
           confirmLabel="Delete"
           variant="danger"
@@ -1654,8 +1659,8 @@ function FileCompareView({
   const syncing = useRef(false);
   const hunkRefs = useRef<(HTMLDivElement | null)[]>([]);
 
-  const leftName = compareState.leftPath.split('/').pop() || 'left';
-  const rightName = compareState.rightPath.split('/').pop() || 'right';
+  const leftName = baseName(compareState.leftPath) || 'left';
+  const rightName = baseName(compareState.rightPath) || 'right';
   const totalHunks = compareState.hunks.length;
 
   const markers = rows.map(r => {

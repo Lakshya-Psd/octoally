@@ -1151,7 +1151,7 @@ export function ProjectView({ projectId, projectPath, projectName: _projectName,
                         <div className="mx-3 my-1" style={{ height: 1, background: 'var(--border)' }} />
                       )}
 
-                      {/* External sessions (tmux sessions not tracked by OctoAlly) */}
+                      {/* External sessions (running outside OctoAlly) */}
                       <div
                         className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider"
                         style={{ color: 'var(--text-secondary)' }}

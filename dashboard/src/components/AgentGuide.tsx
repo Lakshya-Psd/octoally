@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Bot, X, Copy, Check, Play } from 'lucide-react';
+import { useIsWindows } from '../lib/platform';
 
 export function AgentGuideButton() {
   const [open, setOpen] = useState(false);
@@ -29,15 +30,21 @@ interface AgentGuideModalProps {
   additionalInstructions?: string;
 }
 
+/** Example project paths shown in the guide, matching the server OS. */
+interface ExamplePaths { generic: string; project: string }
+const POSIX_EXAMPLES: ExamplePaths = { generic: '/path/to/project', project: '/home/user/myproject' };
+const WINDOWS_EXAMPLES: ExamplePaths = { generic: 'C:/path/to/project', project: 'C:/Users/you/myproject' };
+
 export function AgentGuideModal({ onClose, projectName, projectPath, task, additionalInstructions }: AgentGuideModalProps) {
   const baseUrl = `${window.location.protocol}//${window.location.hostname}:42010`;
+  const ex = useIsWindows() ? WINDOWS_EXAMPLES : POSIX_EXAMPLES;
   const [copiedAll, setCopiedAll] = useState(false);
   const hasContext = !!(projectName && projectPath);
 
   const copyFullGuide = () => {
     const text = hasContext
       ? generateContextualGuide(baseUrl, projectName!, projectPath!, task, additionalInstructions)
-      : generatePlainTextGuide(baseUrl);
+      : generatePlainTextGuide(baseUrl, ex);
     navigator.clipboard.writeText(text);
     setCopiedAll(true);
     setTimeout(() => setCopiedAll(false), 2500);
@@ -146,7 +153,7 @@ export function AgentGuideModal({ onClose, projectName, projectPath, task, addit
 Content-Type: application/json
 
 {
-  "project_path": "/path/to/project",
+  "project_path": "${ex.generic}",
   "task": "Fix the login bug",
   "project_id": "optional-project-id"
 }`} />
@@ -259,7 +266,7 @@ const { session } = await fetch(\`\${BASE}/sessions\`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
-    project_path: "/home/user/myproject",
+    project_path: "${ex.project}",
     task: "Fix the auth middleware"
   })
 }).then(r => r.json());
@@ -358,7 +365,7 @@ function Rule({ children }: { children: React.ReactNode }) {
   );
 }
 
-function generatePlainTextGuide(baseUrl: string): string {
+function generatePlainTextGuide(baseUrl: string, ex: ExamplePaths = POSIX_EXAMPLES): string {
   return `# OctoAlly Agent Integration Guide
 
 ## Overview
@@ -384,7 +391,7 @@ This is the single source of truth for agent integration. It includes all endpoi
 3. Create a session with a project path and task:
    POST ${baseUrl}/api/sessions
    Content-Type: application/json
-   {"project_path": "/path/to/project", "task": "Fix the login bug", "project_id": "optional-project-id"}
+   {"project_path": "${ex.generic}", "task": "Fix the login bug", "project_id": "optional-project-id"}
 
 4. Poll for output + state (single call, no side effects):
    GET ${baseUrl}/api/sessions/:id/display?lines=100
@@ -446,7 +453,7 @@ const caps = await fetch(\`\${BASE}/agent/capabilities\`).then(r => r.json());
 const { session } = await fetch(\`\${BASE}/sessions\`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ project_path: "/home/user/myproject", task: "Fix the auth middleware" })
+  body: JSON.stringify({ project_path: "${ex.project}", task: "Fix the auth middleware" })
 }).then(r => r.json());
 
 // 3. Poll display endpoint for output + state (single call)
@@ -515,7 +522,7 @@ GET ${baseUrl}/api/agent/capabilities
 1. Create a session for this project:
    POST ${baseUrl}/api/sessions
    Content-Type: application/json
-   {"project_path": "${projectPath}", "task": ${JSON.stringify(fullTaskForApi)}}
+   {"project_path": ${JSON.stringify(projectPath)}, "task": ${JSON.stringify(fullTaskForApi)}}
 
 2. Poll for output + state (single call, no side effects):
    GET ${baseUrl}/api/sessions/:id/display?lines=100

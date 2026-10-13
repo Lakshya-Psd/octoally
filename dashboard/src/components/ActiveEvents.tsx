@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useStreamStore } from '../lib/websocket';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { normalizePath } from '../lib/paths';
 import { Radio, Terminal, FileEdit, Zap, AlertCircle, ArrowLeft, FolderOpen } from 'lucide-react';
 
 function stripAnsiCodes(text: string): string {
@@ -145,7 +146,7 @@ export function ActiveEvents({ onBack, onGoToSession }: ActiveEventsProps) {
               if (parsedData) {
                 const fp = parsedData.file_path as string | undefined;
                 const cmd = parsedData.command as string | undefined;
-                if (fp) summary = fp.split('/').slice(-2).join('/');
+                if (fp) summary = normalizePath(fp).split('/').slice(-2).join('/'); // Windows hooks send backslashes
                 else if (cmd) summary = cleanOutput(cmd).slice(0, 80);
               }
 
