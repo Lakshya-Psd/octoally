@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
 import { readdir, stat, readFile, writeFile, rm, rename, cp } from 'fs/promises';
-import { join, resolve, extname, dirname, basename } from 'path';
+import { join, resolve, extname, dirname, basename, isInside } from '../utils/xpath.js';
 import { exec } from 'child_process';
 
 interface FileEntry {
@@ -226,7 +226,7 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ error: 'Source and destination are the same' });
     }
     // Prevent moving a directory into itself or its descendants
-    if (resolvedDestDir === resolvedSrc || resolvedDestDir.startsWith(resolvedSrc + '/')) {
+    if (isInside(resolvedDestDir, resolvedSrc)) {
       return reply.status(400).send({ error: 'Cannot move a folder into itself' });
     }
 
@@ -283,7 +283,7 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
       return reply.status(400).send({ error: 'Source and destination are the same' });
     }
     // Prevent copying a directory into itself or its descendants
-    if (resolvedDestDir === resolvedSrc || resolvedDestDir.startsWith(resolvedSrc + '/')) {
+    if (isInside(resolvedDestDir, resolvedSrc)) {
       return reply.status(400).send({ error: 'Cannot copy a folder into itself' });
     }
 

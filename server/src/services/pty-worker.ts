@@ -9,15 +9,22 @@
  *   Worker → Parent: ready, output, exit, error, replay-chunk, replay-end
  */
 
-import * as pty from 'node-pty-prebuilt-multiarch';
 import { execFile, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, unlinkSync, mkdirSync, createReadStream, readFileSync, readdirSync, statSync, appendFileSync } from 'fs';
 import { join } from 'path';
 import { homedir, tmpdir } from 'os';
 import type { ReadStream } from 'fs';
+import { loadPty, type IPty, type IPtyExit, type PtySpawnOptions } from '../lib/pty.js';
+import * as winmux from '../winmux/client.js';
+import { buildConfiguredCommand, defaultShell, type CommandSpec } from '../winmux/command.js';
 
 const execFileAsync = promisify(execFile);
+const IS_WIN = process.platform === 'win32';
+
+const pty = {
+  spawn: (file: string, args: string[] | string, options: PtySpawnOptions): IPty => loadPty().spawn(file, args, options),
+};
 
 /** Build a clean env for user-facing sessions: strip server-specific vars so
  *  they don't leak into user terminals / Claude Code / dev servers.
@@ -34,7 +41,7 @@ function sessionEnv(): Record<string, string> {
   };
 }
 
-const TIMING_LOG = '/tmp/octoally-timing.log';
+const TIMING_LOG = join(tmpdir(), 'octoally-timing.log');
 function tlog(s: string): void {
   try { appendFileSync(TIMING_LOG, `[${new Date().toISOString()}] ${s}\n`); } catch {}
 }
@@ -311,6 +318,104 @@ function buildAgentCommand(agentType: string, task: string, direct = false, sess
 }
 
 /* ================================================================
+   Windows: winmux sessions (tmux equivalent, see src/winmux)
+   ================================================================ */
+
+/** Session env as a plain string map (what the winmux daemon / ConPTY expects). */
+function sessionEnvRecord(): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [k, v] of Object.entries(sessionEnv())) if (v !== undefined) env[k] = v;
+  return env;
+}
+
+/** What to run for a spawn request on Windows — argv-based, so task text is never shell-parsed. */
+function windowsSpawnSpec(msg: SpawnMessage, env: Record<string, string>): CommandSpec {
+  const cliType = msg.cliType || 'claude';
+  const baseCmd = msg.sessionCommand || cliType;
+  const task = msg.task || '';
+
+  if (msg.mode === 'terminal') {
+    const shell = defaultShell(env);
+    return { file: shell.file, args: shell.args };
+  }
+  if (msg.mode === 'agent' && msg.agentType) {
+    if (cliType === 'codex') {
+      // Codex CLI has no --agent flag; the role goes into the prompt (same as Linux).
+      const prompt = task
+        ? `You are a ${msg.agentType} agent. ${task}`
+        : `You are a ${msg.agentType} agent. Ask me what I want you to do.`;
+      return buildConfiguredCommand(baseCmd, ['--no-alt-screen', prompt], env);
+    }
+    return buildConfiguredCommand(baseCmd, task ? ['--agent', msg.agentType, task] : ['--agent', msg.agentType], env);
+  }
+  if (cliType === 'codex') {
+    return buildConfiguredCommand(baseCmd, task ? ['--no-alt-screen', task] : ['--no-alt-screen'], env);
+  }
+  return buildConfiguredCommand(baseCmd, task ? [task] : [], env);
+}
+
+let muxAttachment: winmux.Attachment | null = null;
+
+/**
+ * Present a winmux attachment through the IPty interface the rest of the worker
+ * uses. As with a tmux client, kill() only detaches — the session keeps running.
+ */
+function attachmentAsPty(att: winmux.Attachment): IPty {
+  let selfDetached = false;
+  const exitListeners: Array<(e: IPtyExit) => void> = [];
+  att.onExit((e) => { for (const l of exitListeners) l(e); });
+  att.onDetach((reason) => {
+    if (selfDetached) return;
+    if (reason === 'attached elsewhere') {
+      // Another client took the session over; it is still alive, so just go
+      // away — the parent sees the worker exit and marks the session detached.
+      process.exit(0);
+    }
+    // The daemon connection dropped: the session is gone with it.
+    for (const l of exitListeners) l({ exitCode: -1 });
+  });
+  return {
+    get pid() { return att.pid; },
+    get cols() { return att.cols; },
+    get rows() { return att.rows; },
+    onData: (l) => { att.onData(l); return { dispose() { /* lives as long as the worker */ } }; },
+    onExit: (l) => { exitListeners.push(l); return { dispose() { /* lives as long as the worker */ } }; },
+    write: (data) => att.write(data),
+    resize: (cols, rows) => att.resize(cols, rows),
+    kill: () => { selfDetached = true; att.detach(); },
+  };
+}
+
+async function winmuxAttach(sessionId: string, cols: number, rows: number): Promise<IPty> {
+  const att = await winmux.attach(tmuxSessionName(sessionId), { cols, rows, client: 'octoally-worker' });
+  muxAttachment = att;
+  return attachmentAsPty(att);
+}
+
+async function handleSpawnWindows(msg: SpawnMessage): Promise<void> {
+  const env = sessionEnvRecord();
+  const spec = windowsSpawnSpec(msg, env);
+  if (msg.useTmux) {
+    await winmux.newSession({
+      name: tmuxSessionName(msg.sessionId),
+      file: spec.file,
+      args: spec.args,
+      cwd: msg.projectPath,
+      env,
+      cols: msg.cols,
+      rows: msg.rows,
+      meta: { owner: 'octoally', projectPath: msg.projectPath, task: msg.task, cliType: msg.cliType },
+    });
+    ptyProcess = await winmuxAttach(msg.sessionId, msg.cols, msg.rows);
+  } else {
+    // Direct mode (OCTOALLY_USE_TMUX=false): no persistence, like Linux without tmux/dtach.
+    ptyProcess = pty.spawn(spec.file, spec.args, {
+      name: 'xterm-256color', cols: msg.cols, rows: msg.rows, cwd: msg.projectPath, env,
+    });
+  }
+}
+
+/* ================================================================
    Terminal response filter
    ================================================================ */
 
@@ -326,7 +431,7 @@ const FOCUS_REPORT_RE = /\x1b\[\?1004[hl]/g;
    Worker state
    ================================================================ */
 
-let ptyProcess: pty.IPty | null = null;
+let ptyProcess: IPty | null = null;
 let pipePaneStream: ReadStream | null = null;
 let pipePaneFifo: string | null = null;
 let currentSessionId: string | null = null;
@@ -395,7 +500,9 @@ async function handleSpawn(msg: SpawnMessage): Promise<void> {
   const cliType = msg.cliType || 'claude';
 
   try {
-    if (msg.mode === 'terminal') {
+    if (IS_WIN) {
+      await handleSpawnWindows(msg);
+    } else if (msg.mode === 'terminal') {
       if (msg.useTmux) {
         await tmuxCreate(msg.sessionId, msg.projectPath, msg.cols, msg.rows);
         const pp = setupPipePane(msg.sessionId);
@@ -482,7 +589,7 @@ async function handleSpawn(msg: SpawnMessage): Promise<void> {
     }
 
     wireOutput();
-    send({ type: 'ready', pid: ptyProcess.pid });
+    send({ type: 'ready', pid: ptyProcess!.pid });
   } catch (err: any) {
     send({ type: 'error', message: `Spawn failed: ${err.message}` });
     process.exit(1);
@@ -495,10 +602,28 @@ async function handleReconnect(msg: ReconnectMessage): Promise<void> {
   useTmux = msg.useTmux;
   useDtach = msg.useDtach;
 
+  if (IS_WIN) {
+    try {
+      if (!msg.useTmux || !(await winmux.hasSession(tmuxSessionName(msg.sessionId)))) {
+        send({ type: 'error', message: 'No winmux session found to reconnect' });
+        process.exit(1);
+        return;
+      }
+      ptyProcess = await winmuxAttach(msg.sessionId, msg.cols, msg.rows);
+      wireOutput();
+      tlog(`[PTY-WORKER] ${msg.sessionId}: total_reconnect=${Date.now() - t0}ms (winmux)`);
+      send({ type: 'ready', pid: ptyProcess.pid, tmux: true });
+    } catch (err: any) {
+      send({ type: 'error', message: `Reconnect failed: ${err.message}` });
+      process.exit(1);
+    }
+    return;
+  }
+
   try {
     const hasTmuxSession = msg.useTmux && tmuxExists(msg.sessionId);
     const hasDtachSession = msg.useDtach && dtachExists(msg.sessionId);
-    const log = (s: string) => appendFileSync('/tmp/octoally-timing.log', s + '\n');
+    const log = (s: string) => appendFileSync(TIMING_LOG, s + '\n');
     log(`[PTY-WORKER] ${msg.sessionId}: exists_check=${Date.now()-t0}ms`);
 
     if (!hasTmuxSession && !hasDtachSession) {
@@ -545,6 +670,34 @@ async function handleReconnect(msg: ReconnectMessage): Promise<void> {
 async function handleAdopt(msg: AdoptMessage): Promise<void> {
   currentSessionId = msg.sessionId;
   useTmux = msg.useTmux;
+
+  if (IS_WIN) {
+    // External winmux session (started with `octoally mux new`): take it over
+    // under this session's name, then attach like any other session.
+    try {
+      const external = msg.socketPath.replace(/^winmux:/, '');
+      const target = tmuxSessionName(msg.sessionId);
+      if (external !== target) {
+        await winmux.detachClients(external);
+        const renamed = await winmux.renameSession(external, target, { owner: 'octoally', projectPath: msg.projectPath });
+        if (!renamed) throw new Error(`external session ${external} is no longer running`);
+      }
+      ptyProcess = await winmuxAttach(msg.sessionId, msg.cols, msg.rows);
+      wireOutput();
+      send({ type: 'ready', pid: ptyProcess.pid });
+      // Nudge a full repaint at the browser's size (ConPTY redraws on resize).
+      setTimeout(() => {
+        try {
+          ptyProcess?.resize(Math.max(2, msg.cols - 1), msg.rows);
+          setTimeout(() => { try { ptyProcess?.resize(msg.cols, msg.rows); } catch { /* ignore */ } }, 50);
+        } catch { /* ignore */ }
+      }, 300);
+    } catch (err: any) {
+      send({ type: 'error', message: `Adopt failed: ${err.message}` });
+      process.exit(1);
+    }
+    return;
+  }
 
   try {
     // Use -r none on initial attach — the browser's resize will trigger SIGWINCH
@@ -635,6 +788,20 @@ function handleCapture(): void {
     return;
   }
 
+  if (IS_WIN) {
+    // The daemon orders the snapshot with the live stream, and IPC preserves
+    // that order, so the parent never sees output from before the snapshot after it.
+    if (!muxAttachment) {
+      send({ type: 'capture', data: null });
+      return;
+    }
+    muxAttachment.capture().then((data) => {
+      tlog(`[WORKER-CAPTURE] ${currentSessionId}: winmux=${Date.now() - t0}ms, bytes=${data?.length ?? 0}`);
+      send({ type: 'capture', data });
+    }, () => send({ type: 'capture', data: null }));
+    return;
+  }
+
   // Pause pipe-pane stream to stop new output messages from entering IPC.
   if (pipePaneStream) pipePaneStream.pause();
 
@@ -662,6 +829,21 @@ function handleCapture(): void {
 }
 
 async function handleKill(): Promise<void> {
+  if (IS_WIN) {
+    if (useTmux && currentSessionId) {
+      // Detach first so our own client doesn't report the exit, then kill the session.
+      try { ptyProcess?.kill(); } catch { /* ignore */ }
+      await winmux.killSession(tmuxSessionName(currentSessionId)).catch(() => {});
+    } else if (ptyProcess) {
+      const pid = ptyProcess.pid;
+      execFile('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }, () => {});
+      try { ptyProcess.kill(); } catch { /* dead */ }
+    }
+    send({ type: 'killed' });
+    setTimeout(() => process.exit(0), 300);
+    return;
+  }
+
   // Kill PTY process tree
   if (ptyProcess) {
     const pid = ptyProcess.pid;

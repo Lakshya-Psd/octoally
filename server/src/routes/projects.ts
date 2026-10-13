@@ -2,7 +2,8 @@ import { FastifyPluginAsync } from 'fastify';
 import { getDb } from '../db/index.js';
 import { nanoid } from 'nanoid';
 import { readdir, mkdir, readFile, writeFile, rm, unlink, copyFile } from 'fs/promises';
-import { join, resolve, basename } from 'path';
+import { join, resolve, basename, dirname, listDrives } from '../utils/xpath.js';
+import { IS_WIN, normalizeUserPath, execCli } from '../utils/platform.js';
 import { homedir } from 'os';
 import { execFile } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, readdirSync, lstatSync, unlinkSync } from 'fs';
@@ -193,7 +194,7 @@ async function cleanRufloFromProject(projectPath: string): Promise<string[]> {
   // Deregister ruflo/devcortex/claude-flow MCP servers (idempotent)
   for (const server of ['ruflo', 'devcortex', 'claude-flow']) {
     try {
-      await execFileAsync('claude', ['mcp', 'remove', server], {
+      await execCli('claude', ['mcp', 'remove', server], {
         cwd: projectPath,
         timeout: 15_000,
       });
@@ -251,9 +252,9 @@ export interface Project {
  * validation is warn-only by design (the folder may be created later).
  */
 function normalizeProjectPath(p: string): string {
-  const trimmed = (p || '').trim();
-  if (trimmed === '/' || trimmed === '') return trimmed;
-  return trimmed.replace(/\/+$/, '');
+  // POSIX: trim + strip trailing '/'. Windows additionally: backslashes → '/',
+  // upper-case drive letter, keep the root as `C:/`.
+  return normalizeUserPath(p);
 }
 
 /** ~/.octoally/projects.json — portable backup, not the source of truth */
@@ -493,11 +494,11 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
     // Deregister ruflo/devcortex MCP globally
     try {
-      await execFileAsync('claude', ['mcp', 'remove', 'ruflo'], { timeout: 15_000 });
+      await execCli('claude', ['mcp', 'remove', 'ruflo'], { timeout: 15_000 });
       globalCleaned.push('deregistered ruflo MCP (global)');
     } catch { /* already removed */ }
     try {
-      await execFileAsync('claude', ['mcp', 'remove', 'devcortex'], { timeout: 15_000 });
+      await execCli('claude', ['mcp', 'remove', 'devcortex'], { timeout: 15_000 });
       globalCleaned.push('deregistered devcortex MCP (global)');
     } catch { /* already removed */ }
 
@@ -681,7 +682,20 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
   app.get<{
     Querystring: { path?: string };
   }>('/browse', async (req, reply) => {
+    const DRIVES_ROOT = '::drives';
+    // Windows: a virtual "This PC" level listing the drives, reached by going up from a drive root.
+    if (IS_WIN && req.query.path === DRIVES_ROOT) {
+      const drives = await listDrives();
+      return {
+        path: DRIVES_ROOT,
+        parent: null,
+        folderName: 'This PC',
+        dirs: drives.map((d) => ({ name: d.slice(0, 2), path: d, hasChildren: true })),
+      };
+    }
+
     const dirPath = resolve(req.query.path || homedir());
+    const isRoot = dirname(dirPath) === dirPath;
 
     try {
       const entries = await readdir(dirPath, { withFileTypes: true });
@@ -691,6 +705,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
         if (!entry.isDirectory()) continue;
         if (entry.name.startsWith('.')) continue;
         if (entry.name === 'node_modules' || entry.name === '__pycache__') continue;
+        // Windows system folders that are never project locations
+        if (IS_WIN && (entry.name.startsWith('$') || entry.name === 'System Volume Information')) continue;
 
         const fullPath = join(dirPath, entry.name);
         let hasChildren = false;
@@ -708,8 +724,8 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
 
       return {
         path: dirPath,
-        parent: dirPath === '/' ? null : resolve(dirPath, '..'),
-        folderName: basename(dirPath),
+        parent: isRoot ? (IS_WIN ? DRIVES_ROOT : null) : resolve(dirPath, '..'),
+        folderName: basename(dirPath) || dirPath,
         dirs,
       };
     } catch (err: any) {

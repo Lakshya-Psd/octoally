@@ -1,7 +1,21 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
+import { copyFileSync, mkdirSync } from 'fs';
+import { homedir } from 'os';
+import { fileURLToPath } from 'url';
 import { config } from '../config.js';
+import { IS_WIN, toClientPath } from '../utils/platform.js';
+
+/** Copy the Node hook script to ~/.octoally/hooks/ (stable path across updates). */
+function installWindowsHookScript(): string {
+  const src = join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'octoally-hook.cjs');
+  const destDir = join(homedir(), '.octoally', 'hooks');
+  const dest = join(destDir, 'octoally-hook.cjs');
+  mkdirSync(destDir, { recursive: true });
+  copyFileSync(src, dest);
+  return dest;
+}
 
 const OCTOALLY_HOOK_MARKER = '# octoally-events-hook';
 const LEGACY_HOOK_MARKER = '# hivecommand-events-hook';
@@ -14,6 +28,13 @@ const LEGACY_HOOK_MARKER = '# hivecommand-events-hook';
 function buildHookCommand(projectPath: string): string {
   const port = config.port || 42010;
   const url = `http://localhost:${port}/api/events`;
+  if (IS_WIN) {
+    // No mktemp/cat/& on Windows: a Node script does the same hand-off. Plain
+    // `node "<script>" ...` runs the same from Git Bash, cmd and PowerShell; the
+    // trailing marker is a comment in bash/PowerShell and an ignored arg in cmd.
+    const script = toClientPath(installWindowsHookScript());
+    return `node "${script}" "${projectPath.replace(/"/g, '')}" "${url}" ${OCTOALLY_HOOK_MARKER}`;
+  }
   const escapedPath = projectPath.replace(/"/g, '\\"');
   const nodeScript = [
     "const fs=require('fs');",

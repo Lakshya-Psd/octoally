@@ -9,6 +9,7 @@ import * as sessionManager from '../services/session-manager.js';
 import { RESIZE_MARKER, registerPendingSpawn, getSessionTmuxServer } from '../services/session-manager.js';
 import { getTracker } from '../services/session-state.js';
 import { getDb } from '../db/index.js';
+import { openAttachConsole } from '../utils/win-shell.js';
 
 export const sessionRoutes: FastifyPluginAsync = async (app) => {
   // List sessions
@@ -286,6 +287,24 @@ export const sessionRoutes: FastifyPluginAsync = async (app) => {
     if (!session) return reply.status(404).send({ error: 'Session not found' });
 
     const sessionId = req.params.id;
+
+    // Windows: open a console window running `octoally mux attach of-<id>`
+    // (Windows Terminal when installed), then release the dashboard's hold.
+    if (process.platform === 'win32') {
+      const muxName = await sessionManager.getSessionMuxName(sessionId);
+      if (!muxName) return reply.status(400).send({ error: 'No running winmux session found' });
+      const project = session.project_id
+        ? getDb().prepare('SELECT path FROM projects WHERE id = ?').get(session.project_id) as { path: string } | undefined
+        : undefined;
+      try {
+        const terminal = await openAttachConsole(muxName, `OctoAlly: ${session.task}`, project?.path);
+        sessionManager.releaseSession(sessionId);
+        return { ok: true, terminal, socketPath: muxName };
+      } catch (err: any) {
+        return { ok: false, error: err?.message || 'Could not open a terminal window' };
+      }
+    }
+
     const socketPath = sessionManager.getSessionSocketPath(sessionId);
     const tmuxSession = sessionManager.getSessionTmuxName(sessionId);
 

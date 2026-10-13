@@ -80,10 +80,13 @@ function binaryAvailable(name: string): boolean {
   }
 }
 
-const wantDtach = (process.env.OCTOALLY_USE_DTACH || process.env.HIVECOMMAND_USE_DTACH) !== 'false';
-const hasDtach = binaryAvailable('dtach');
+const isWindows = process.platform === 'win32';
+// On Windows, OctoAlly's own winmux daemon (src/winmux) plays tmux's role and
+// dtach has no equivalent, so neither binary is looked up.
+const wantDtach = !isWindows && (process.env.OCTOALLY_USE_DTACH || process.env.HIVECOMMAND_USE_DTACH) !== 'false';
+const hasDtach = wantDtach && binaryAvailable('dtach');
 const wantTmux = (process.env.OCTOALLY_USE_TMUX || process.env.HIVECOMMAND_USE_TMUX) !== 'false';
-const hasTmux = binaryAvailable('tmux');
+const hasTmux = isWindows || binaryAvailable('tmux');
 
 if (wantDtach && !hasDtach) {
   console.warn('  dtach not found — falling back to direct mode. Install with: sudo apt install dtach');
@@ -110,6 +113,8 @@ export const config = {
   /** Use dtach to persist sessions across server restarts. Enabled by default, set OCTOALLY_USE_DTACH=false to disable. */
   useDtach: wantDtach && hasDtach,
   /** Use tmux for plain terminal sessions. Provides proper resize/reflow handling
-   *  and scrollback preservation. Enabled by default, set OCTOALLY_USE_TMUX=false to disable. */
+   *  and scrollback preservation. Enabled by default, set OCTOALLY_USE_TMUX=false to disable.
+   *  On Windows this means the built-in winmux daemon. */
   useTmux: wantTmux && hasTmux,
+  isWindows,
 };

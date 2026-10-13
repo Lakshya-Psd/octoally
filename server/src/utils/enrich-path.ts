@@ -10,8 +10,37 @@
  */
 
 import { readdirSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, delimiter } from 'path';
 import { homedir } from 'os';
+
+/**
+ * Windows: tools installed per-user (Claude Code's native installer, npm globals,
+ * Volta, nvm-windows, fnm, Scoop, Git) whose folders may be missing from the
+ * PATH of a server started at login or from the desktop app.
+ */
+function discoverWindowsDirs(): string[] {
+  const home = homedir();
+  const env = process.env;
+  const localAppData = env.LOCALAPPDATA || join(home, 'AppData', 'Local');
+  const appData = env.APPDATA || join(home, 'AppData', 'Roaming');
+  const programFiles = env.ProgramFiles || 'C:\\Program Files';
+  const candidates = [
+    join(home, '.local', 'bin'),                 // Claude Code native installer
+    join(appData, 'npm'),                        // npm global bin
+    join(programFiles, 'nodejs'),
+    env.NVM_SYMLINK || '',                       // nvm-windows active version
+    join(localAppData, 'Volta', 'bin'),
+    join(programFiles, 'Volta'),
+    join(appData, 'fnm', 'aliases', 'default'),
+    join(home, 'scoop', 'shims'),
+    join(localAppData, 'pnpm'),
+    join(programFiles, 'Git', 'cmd'),
+    join(localAppData, 'Programs', 'Microsoft VS Code', 'bin'),
+    join(programFiles, 'Microsoft VS Code', 'bin'),
+    join(localAppData, 'Microsoft', 'WindowsApps'), // wt.exe, winget
+  ];
+  return candidates.filter((d) => d && existsSync(d));
+}
 
 function discoverNodeDirs(): string[] {
   const home = homedir();
@@ -73,6 +102,20 @@ function discoverNodeDirs(): string[] {
 }
 
 export function enrichProcessPath(): void {
+  if (process.platform === 'win32') {
+    // Windows env keys are case-insensitive but Node exposes the original
+    // spelling (usually "Path"); write back through the same key.
+    const key = Object.keys(process.env).find((k) => k.toUpperCase() === 'PATH') || 'Path';
+    const currentPath = process.env[key] || '';
+    const pathSet = new Set(currentPath.split(delimiter).map((p) => p.replace(/[\\/]+$/, '').toLowerCase()));
+    // Append (not prepend): the user's own PATH order wins on Windows.
+    const toAdd = discoverWindowsDirs().filter((d) => !pathSet.has(d.replace(/[\\/]+$/, '').toLowerCase()));
+    if (toAdd.length > 0) {
+      process.env[key] = [currentPath, ...toAdd].filter(Boolean).join(delimiter);
+    }
+    return;
+  }
+
   const currentPath = process.env.PATH || '';
   const pathSet = new Set(currentPath.split(':'));
   const toAdd = discoverNodeDirs().filter((d) => !pathSet.has(d));

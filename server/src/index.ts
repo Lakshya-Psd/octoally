@@ -35,7 +35,12 @@ import { config } from './config.js';
 import { appendFileSync, writeFileSync } from 'fs';
 import { createServer as createNetServer } from 'net';
 import { installDefaultAgents } from './data/default-agents.js';
-const tlog = (s: string) => { try { appendFileSync('/tmp/octoally-timing.log', `[${new Date().toISOString()}] ${s}\n`); } catch {} };
+import { IS_WIN, tempPath, toClientPath } from './utils/platform.js';
+import { openUrl, openFolder, openTerminalAt, scheduleRelaunch } from './utils/win-shell.js';
+import { defaultShell } from './winmux/command.js';
+import { homedir } from 'os';
+const TIMING_LOG = tempPath('octoally-timing.log');
+const tlog = (s: string) => { try { appendFileSync(TIMING_LOG, `[${new Date().toISOString()}] ${s}\n`); } catch {} };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -72,7 +77,7 @@ async function start() {
   });
 
   // Clear timing log for fresh run
-  try { writeFileSync('/tmp/octoally-timing.log', ''); } catch {}
+  try { writeFileSync(TIMING_LOG, ''); } catch {}
 
   // Install default agents to ~/.claude/agents/ if not present
   try {
@@ -165,6 +170,10 @@ async function start() {
     if (!url || typeof url !== 'string' || !(url.startsWith('http://') || url.startsWith('https://'))) {
       return reply.status(400).send({ error: 'Invalid URL' });
     }
+    if (IS_WIN) {
+      await openUrl(url).catch(() => {});
+      return { ok: true };
+    }
     const { execFile } = await import('child_process');
     execFile('xdg-open', [url], (err) => {
       if (err) execFile('open', [url]); // macOS fallback
@@ -177,6 +186,14 @@ async function start() {
     const { path } = req.body as { path?: string };
     if (!path || typeof path !== 'string') {
       return reply.status(400).send({ error: 'Invalid path' });
+    }
+    if (IS_WIN) {
+      try {
+        await openFolder(path);
+        return { ok: true };
+      } catch (err: any) {
+        return reply.status(500).send({ error: `Failed to open folder: ${err?.message ?? err}` });
+      }
     }
     const { spawn } = await import('child_process');
     const isMac = process.platform === 'darwin';
@@ -191,6 +208,14 @@ async function start() {
     const { path } = req.body as { path?: string };
     if (!path || typeof path !== 'string') {
       return reply.status(400).send({ error: 'Invalid path' });
+    }
+    if (IS_WIN) {
+      try {
+        const terminal = await openTerminalAt(path);
+        return { ok: true, terminal };
+      } catch (err: any) {
+        return reply.status(500).send({ error: `Failed to open terminal: ${err?.message ?? err}` });
+      }
     }
     const { spawn, exec } = await import('child_process');
     const isMac = process.platform === 'darwin';
@@ -286,10 +311,29 @@ async function start() {
   });
 
   // Return the update command — the dashboard handles copy-to-clipboard.
+  // The npm release only ships Linux/macOS builds; this Windows port updates itself.
+  const updateCommand = IS_WIN ? 'octoally update' : 'npx -y octoally@latest';
   app.get('/api/update-command', async () => {
     return {
-      command: 'npx -y octoally@latest',
+      command: updateCommand,
     };
+  });
+
+  // Platform facts for the dashboard (path style, home dir, drive list support, shell)
+  app.get('/api/platform', async () => {
+    return {
+      platform: process.platform,
+      home: toClientPath(homedir()),
+      drivesRoot: IS_WIN ? '::drives' : null,
+      shell: IS_WIN ? defaultShell().name : (process.env.SHELL || '/bin/bash'),
+      updateCommand,
+    };
+  });
+
+  // Graceful stop (used by the Windows CLI and desktop app — there is no SIGTERM on Windows)
+  app.post('/api/shutdown', async () => {
+    setTimeout(shutdown, 200);
+    return { ok: true, message: 'Server shutting down...' };
   });
 
   // Health check — read version from package.json
@@ -315,6 +359,8 @@ async function start() {
 
   // Restart server — exits the process so the parent (CLI/systemd/Electron) can relaunch
   app.post('/api/restart', async () => {
+    // Under the desktop app the watchdog relaunches us; a CLI-started server needs a helper.
+    if (IS_WIN && process.env.OCTOALLY_SUPERVISED !== '1') scheduleRelaunch();
     setTimeout(() => process.exit(0), 500);
     return { ok: true, message: 'Server restarting...' };
   });
@@ -406,6 +452,7 @@ function shutdown() {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+if (IS_WIN) process.on('SIGBREAK', shutdown); // Ctrl+Break / console close on Windows
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception — cleaning up sessions:', err);
   killAllSessions();

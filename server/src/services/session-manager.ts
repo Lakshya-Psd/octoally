@@ -12,6 +12,8 @@ import { getSetting } from '../routes/settings.js';
 import { nanoid } from 'nanoid';
 import type { WebSocket } from 'ws';
 import { getOrCreateTracker, removeTracker, recoverFromBuffer } from './session-state.js';
+import * as winmux from '../winmux/client.js';
+import { IS_WIN, tempPath, claudeProjectDirName, killProcessTree } from '../utils/platform.js';
 
 const nodeRequire = createRequire(import.meta.url);
 const { Terminal: HeadlessTerminal } = nodeRequire('@xterm/headless') as { Terminal: any };
@@ -20,7 +22,7 @@ const { SerializeAddon } = nodeRequire('@xterm/addon-serialize') as { SerializeA
 const execFileAsync = promisify(execFile);
 const readFileAsync = promisify(readFile);
 
-const TIMING_LOG = '/tmp/octoally-timing.log';
+const TIMING_LOG = tempPath('octoally-timing.log');
 function tlog(s: string): void {
   try { appendFileSync(TIMING_LOG, `[${new Date().toISOString()}] ${s}\n`); } catch {}
 }
@@ -31,7 +33,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
    Restart storm detection & session spawn guard
    ================================================================ */
 
-const RESTART_LOG = '/tmp/octoally-restart-timestamps.json';
+const RESTART_LOG = tempPath('octoally-restart-timestamps.json');
 /** Max server starts within RESTART_WINDOW_MS before we skip auto-resume */
 const RESTART_STORM_THRESHOLD = 3;
 const RESTART_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
@@ -122,6 +124,7 @@ interface ActiveSession {
   replayBuffer: string[];  // ring buffer of recent output chunks for instant replay
   replayBytes: number;     // total bytes in replayBuffer
   wsPendingData: string | null; // batched WS output waiting to be sent
+  captureWaiters: Array<(data: string | null) => void>; // Windows: snapshots requested from the worker
 }
 
 const activeSessions = new Map<string, ActiveSession>();
@@ -472,6 +475,7 @@ function tmuxArgsForSession(sessionId: string): string[] {
 /** Check if a tmux session is alive on any server (octoally, hivecommand, openflow) */
 async function tmuxExistsAsync(sessionId: string): Promise<boolean> {
   const name = tmuxSessionName(sessionId);
+  if (IS_WIN) return winmux.hasSession(name).catch(() => false);
   for (const server of [TMUX_SERVER, ...LEGACY_TMUX_SERVERS]) {
     try {
       await execFileAsync('tmux', ['-L', server, 'has-session', '-t', name]);
@@ -496,6 +500,16 @@ function tmuxListOctoallySessionIds(): string[] {
     } catch { /* server not running */ }
   }
   return [...ids];
+}
+
+/** Windows: OctoAlly session IDs still alive in the winmux daemon. */
+async function winmuxListOctoallySessionIds(): Promise<string[]> {
+  try {
+    const sessions = await winmux.listSessions();
+    return sessions.filter(s => s.name.startsWith('of-')).map(s => s.name.slice(3));
+  } catch {
+    return [];
+  }
 }
 
 /* ================================================================
@@ -563,7 +577,7 @@ function dtachListOctoallySessions(): string[] {
 
 /** Snapshot existing .jsonl UUIDs in a Claude project dir (for diffing after spawn) */
 function snapshotClaudeSessionFiles(projectPath: string): Set<string> {
-  const claudeProjectDir = join(homedir(), '.claude', 'projects', projectPath.replace(/\//g, '-'));
+  const claudeProjectDir = join(homedir(), '.claude', 'projects', claudeProjectDirName(projectPath));
   try {
     return new Set(
       readdirSync(claudeProjectDir)
@@ -607,6 +621,7 @@ function wireWorker(sessionId: string, worker: ChildProcess, projectPath?: strin
     replayBuffer: [],
     replayBytes: 0,
     wsPendingData: null,
+    captureWaiters: [],
   };
 
   activeSessions.set(sessionId, active);
@@ -625,7 +640,7 @@ function wireWorker(sessionId: string, worker: ChildProcess, projectPath?: strin
     } catch { /* ignore */ }
 
     if (projectPath) {
-      const sanitized = projectPath.replace(/\//g, '-');
+      const sanitized = claudeProjectDirName(projectPath);
       const jsonlPath = join(homedir(), '.claude', 'projects', sanitized, uuid + '.jsonl');
       tracker.setJsonlFile(jsonlPath);
       console.log(`  JSONL output file: ${jsonlPath}`);
@@ -634,7 +649,7 @@ function wireWorker(sessionId: string, worker: ChildProcess, projectPath?: strin
 
   // Fallback: diff ~/.claude/projects/<path>/ against pre-spawn snapshot
   if (projectPath && preSpawnFiles) {
-    const claudeProjectDir = join(homedir(), '.claude', 'projects', projectPath.replace(/\//g, '-'));
+    const claudeProjectDir = join(homedir(), '.claude', 'projects', claudeProjectDirName(projectPath));
     let fileScanDone = false;
     const unsub = tracker.onStateChange(async (state) => {
       if (fileScanDone || uuidPersisted) { fileScanDone = true; return; }
@@ -685,7 +700,8 @@ function wireWorker(sessionId: string, worker: ChildProcess, projectPath?: strin
         if (!active.wsPendingData) {
           active.wsPendingData = msg.data;
           setTimeout(() => {
-            const data = active.wsPendingData!;
+            const data = active.wsPendingData;
+            if (data === null) return; // already flushed ahead of a snapshot
             active.wsPendingData = null;
             for (const ws of active.subscribers) {
               try {
@@ -761,6 +777,13 @@ function wireWorker(sessionId: string, worker: ChildProcess, projectPath?: strin
         break;
       }
 
+      case 'capture': {
+        // Windows: snapshot requested via requestWorkerCapture(). It arrives in
+        // order with 'output' messages, so everything before it is already queued.
+        active.captureWaiters.shift()?.(msg.data ?? null);
+        break;
+      }
+
       case 'error': {
         console.error(`[WORKER] Error for session ${sessionId}: ${msg.message}`);
         break;
@@ -775,6 +798,7 @@ function wireWorker(sessionId: string, worker: ChildProcess, projectPath?: strin
 
   // Handle worker process exit (crash, disconnect)
   worker.on('exit', async (code, _signal) => {
+    for (const waiter of active.captureWaiters.splice(0)) waiter(null);
     if (activeSessions.has(sessionId)) {
       // Worker died unexpectedly — clean up
       if (pendingInserts.has(sessionId)) {
@@ -1043,7 +1067,8 @@ export async function reconnectSession(sessionId: string, opts?: { skipPipePaneR
     // Session: fall back to tmux capture-pane (sessions redraw on SIGWINCH).
     const seedStart = Date.now();
     let seeded = false;
-    if (session.task === 'Terminal' && !opts?.skipPipePaneReplay) {
+    // Windows: the winmux snapshot below is exact, so skip the DB re-render.
+    if (session.task === 'Terminal' && !opts?.skipPipePaneReplay && !IS_WIN) {
       try {
         const serialized = await serializeSessionOutput(
           sessionId,
@@ -1058,7 +1083,16 @@ export async function reconnectSession(sessionId: string, opts?: { skipPipePaneR
         }
       } catch (err) { tlog(`[RECONNECT] ${sessionId}: serialize-seed error: ${err}`); }
     }
-    if (!seeded && config.useTmux && hasTmuxSession) {
+    if (!seeded && config.useTmux && hasTmuxSession && IS_WIN) {
+      try {
+        const snapshot = await winmux.capturePane(tmuxSessionName(sessionId));
+        if (snapshot) {
+          active.replayBuffer.push(snapshot);
+          active.replayBytes = snapshot.length;
+        }
+        tlog(`[RECONNECT] ${sessionId}: winmux-seed=${Date.now() - seedStart}ms (${snapshot?.length || 0} bytes)`);
+      } catch { /* daemon busy — live output will follow */ }
+    } else if (!seeded && config.useTmux && hasTmuxSession) {
       // Fallback: capture-pane (for sessions or when DB has no data)
       try {
         const name = tmuxSessionName(sessionId);
@@ -1137,6 +1171,19 @@ export function sendReplay(sessionId: string, ws: WebSocket, preferCapture = fal
   const active = activeSessions.get(sessionId);
   if (!active) return;
 
+  // Windows: a winmux snapshot is exact at the current size and ordered with the
+  // live stream, so it is always the best replay (no raw-chunk replay glitches).
+  if (IS_WIN && config.useTmux) {
+    tlog(`[REPLAY] ${sessionId}: winmux snapshot (preferCapture=${preferCapture})`);
+    sendWinmuxSnapshot(sessionId, ws).then((ok) => {
+      if (!ok && active.replayBuffer.length > 0) {
+        const data = '\x1b[H\x1b[2J\x1b[3J' + active.replayBuffer.join('');
+        try { ws.send(JSON.stringify({ type: 'output', sessionId, data })); } catch { /* ws closed */ }
+      }
+    });
+    return;
+  }
+
   // When tmux is available and capture is preferred (e.g. after resize),
   // use capture-pane for a pixel-perfect rendering at the current dimensions.
   if (preferCapture && config.useTmux) {
@@ -1168,6 +1215,54 @@ export function sendReplay(sessionId: string, ws: WebSocket, preferCapture = fal
   requestCapture(sessionId, ws).catch(() => {});
 }
 
+/** Windows: ask the session's worker for a winmux snapshot (ordered with its output). */
+function requestWorkerCapture(active: ActiveSession): Promise<string | null> {
+  return new Promise((resolve) => {
+    let done = false;
+    const waiter = (data: string | null) => { if (!done) { done = true; resolve(data); } };
+    active.captureWaiters.push(waiter);
+    try {
+      active.worker.send({ type: 'capture' });
+    } catch {
+      active.captureWaiters.splice(active.captureWaiters.indexOf(waiter), 1);
+      waiter(null);
+      return;
+    }
+    setTimeout(() => {
+      const idx = active.captureWaiters.indexOf(waiter);
+      if (idx >= 0) active.captureWaiters.splice(idx, 1);
+      waiter(null);
+    }, 5000);
+  });
+}
+
+/** Send any batched output right away (so nothing older than a snapshot follows it). */
+function flushWsPending(sessionId: string, active: ActiveSession): void {
+  const data = active.wsPendingData;
+  if (data === null) return;
+  active.wsPendingData = null;
+  for (const sub of active.subscribers) {
+    try { sub.send(JSON.stringify({ type: 'output', sessionId, data })); } catch { active.subscribers.delete(sub); }
+  }
+}
+
+/** Windows replay: clear the client and draw an exact winmux snapshot. */
+async function sendWinmuxSnapshot(sessionId: string, ws: WebSocket): Promise<boolean> {
+  const active = activeSessions.get(sessionId);
+  if (!active) return false;
+  const data = await requestWorkerCapture(active);
+  if (data == null || activeSessions.get(sessionId) !== active) return false;
+  flushWsPending(sessionId, active);
+  // The snapshot is a complete redraw — later output appends to it cleanly.
+  active.replayBuffer.length = 0;
+  active.replayBuffer.push(data);
+  active.replayBytes = data.length;
+  try {
+    ws.send(JSON.stringify({ type: 'output', sessionId, data: '\x1b[H\x1b[2J\x1b[3J' + data }));
+  } catch { /* ws closed */ }
+  return true;
+}
+
 /** Strip trailing blank lines from capture-pane output.
  *  capture-pane captures all visible rows, including empty ones below the prompt.
  *  This prevents replay from showing a bunch of blank space with the cursor at the bottom. */
@@ -1193,6 +1288,7 @@ const CAPTURE_CACHE_TTL = 2000; // 2 seconds
 export function requestCapture(sessionId: string, ws: WebSocket): Promise<void> {
   const t0 = Date.now();
   if (!config.useTmux) return Promise.resolve();
+  if (IS_WIN) return sendWinmuxSnapshot(sessionId, ws).then(() => {});
 
   // Serve from cache if fresh
   const cached = captureCache.get(sessionId);
@@ -1326,6 +1422,10 @@ function getDescendantPids(pid: number): number[] {
 }
 
 function killPidTree(pid: number): void {
+  if (IS_WIN) {
+    killProcessTree(pid);
+    return;
+  }
   const descendants = getDescendantPids(pid);
   const allPids = [...descendants, pid];
   for (const p of allPids) {
@@ -1387,8 +1487,9 @@ export async function killSession(sessionId: string): Promise<boolean> {
     removeTracker(sessionId);
   }
 
-  // 5. Kill adopted external session processes (fire and forget)
-  if (active?.externalSocket) {
+  // 5. Kill adopted external session processes (fire and forget).
+  //    (Windows: adopted sessions were renamed to of-<id>, so step 4 covers them.)
+  if (active?.externalSocket && !IS_WIN) {
     const sock = active.externalSocket;
     adoptedSockets.delete(sock);
     execFileAsync('fuser', [sock]).then(({ stdout }) => {
@@ -1406,6 +1507,10 @@ export async function killSession(sessionId: string): Promise<boolean> {
 
   // 6. Fallback: kill by DB PID if no active session (e.g. server restarted)
   if (!active) {
+    if (IS_WIN && config.useTmux) {
+      // A detached/released session may still be running in the winmux daemon.
+      await winmux.killSession(tmuxSessionName(sessionId)).catch(() => false);
+    }
     try {
       const session = getDb().prepare('SELECT pid FROM sessions WHERE id = ?').get(sessionId) as { pid: number | null } | undefined;
       if (session?.pid && pidAlive(session.pid)) {
@@ -1540,6 +1645,13 @@ export function getSessionTmuxName(sessionId: string): string | null {
   return null;
 }
 
+/** Windows: the winmux session name for an active session, if it is alive in the daemon. */
+export async function getSessionMuxName(sessionId: string): Promise<string | null> {
+  if (!activeSessions.has(sessionId)) return null;
+  const name = tmuxSessionName(sessionId);
+  return (await winmux.hasSession(name).catch(() => false)) ? name : null;
+}
+
 /** Get the tmux server name that hosts a session */
 export function getSessionTmuxServer(sessionId: string): string {
   const name = tmuxSessionName(sessionId);
@@ -1605,7 +1717,9 @@ export async function cleanupStaleRunningSessions(): Promise<void> {
 
     const t1 = Date.now();
     const aliveDtach = config.useDtach ? new Set(dtachListOctoallySessions()) : new Set<string>();
-    const aliveTmux = config.useTmux ? new Set(tmuxListOctoallySessionIds()) : new Set<string>();
+    const aliveTmux = !config.useTmux
+      ? new Set<string>()
+      : new Set(IS_WIN ? await winmuxListOctoallySessionIds() : tmuxListOctoallySessionIds());
     tlog(`[CLEANUP] session listing: ${Date.now() - t1}ms (${stale.length} stale, ${aliveTmux.size} tmux, ${aliveDtach.size} dtach)`);
     let detached = 0;
     let cleaned = 0;
@@ -1956,9 +2070,38 @@ async function isOctoAllyOwnedAsync(pid: number): Promise<boolean> {
   }
 }
 
-export async function discoverExternalSessions(projectPath?: string): Promise<DiscoverableSession[]> {
+/** Path equality as the dashboard sees it (case-insensitive, either slash, on Windows). */
+function samePath(a: string, b: string): boolean {
+  if (!IS_WIN) return a === b;
+  const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  return norm(a) === norm(b);
+}
+
+/** Windows: sessions started outside the dashboard with `octoally mux new`. */
+async function discoverWinmuxExternalSessions(projectPath?: string): Promise<DiscoverableSession[]> {
   const results: DiscoverableSession[] = [];
   try {
+    for (const s of await winmux.listSessions()) {
+      if (s.meta.owner !== 'external') continue;
+      const socketPath = `winmux:${s.name}`;
+      if (adoptedSockets.has(socketPath)) continue;
+      const sessionProjectPath = s.meta.projectPath || s.cwd.replace(/\\/g, '/');
+      if (projectPath && !samePath(sessionProjectPath, projectPath)) continue;
+      results.push({
+        socketPath,
+        projectPath: sessionProjectPath,
+        task: s.meta.task || s.command,
+        startedAt: s.createdAt,
+        cliType: s.meta.cliType === 'codex' ? 'codex' : s.meta.cliType === 'claude' ? 'claude' : undefined,
+      });
+    }
+  } catch { /* daemon not running */ }
+  return results;
+}
+
+export async function discoverExternalSessions(projectPath?: string): Promise<DiscoverableSession[]> {
+  const results: DiscoverableSession[] = IS_WIN ? await discoverWinmuxExternalSessions(projectPath) : [];
+  if (!IS_WIN) try {
     const files = readdirSync('/tmp')
       .filter(f => f.startsWith('hivemind-') && f.endsWith('.sock'));
 
@@ -2030,7 +2173,7 @@ export async function discoverExternalSessions(projectPath?: string): Promise<Di
         continue;
       }
 
-      if (projectPath && s.project_path !== projectPath) continue;
+      if (projectPath && !samePath(s.project_path, projectPath)) continue;
 
       results.push({
         socketPath: `tmux:${tmuxName}`,
@@ -2049,6 +2192,10 @@ export async function adoptDtachSession(socketPath: string, projectId?: string):
   // Handle re-adoption of released OctoAlly tmux sessions
   if (socketPath.startsWith('tmux:')) {
     return readoptReleasedSession(socketPath.replace('tmux:', ''), projectId);
+  }
+
+  if (socketPath.startsWith('winmux:')) {
+    return adoptWinmuxSession(socketPath, projectId);
   }
 
   if (adoptedSockets.has(socketPath)) return null;
@@ -2111,6 +2258,38 @@ export async function adoptDtachSession(socketPath: string, projectId?: string):
 }
 
 /**
+ * Windows: adopt a session started with `octoally mux new`. Like the dtach path,
+ * the actual takeover (rename to of-<id> + attach) waits for the browser's
+ * dimensions — see spawnAdopt() and the worker's handleAdopt().
+ */
+async function adoptWinmuxSession(socketPath: string, projectId?: string): Promise<Session | null> {
+  if (adoptedSockets.has(socketPath)) return null;
+  const name = socketPath.slice('winmux:'.length);
+  let info: Awaited<ReturnType<typeof winmux.listSessions>>[number] | undefined;
+  try {
+    info = (await winmux.listSessions()).find(s => s.name === name && s.meta.owner === 'external');
+  } catch { /* daemon not running */ }
+  if (!info) return null;
+
+  const projectPath = info.meta.projectPath || info.cwd.replace(/\\/g, '/');
+  const task = info.meta.task || 'Adopted external session';
+  const cliType = info.meta.cliType === 'codex' ? 'codex' : 'claude';
+  const session = createSession(projectPath, task, projectId || undefined, cliType);
+  adoptedSockets.add(socketPath);
+  const db = getDb();
+  db.prepare('UPDATE sessions SET external_socket = ? WHERE id = ?').run(socketPath, session.id);
+  registerPendingSpawn(session.id, {
+    projectPath,
+    task,
+    mode: 'adopt',
+    projectId: projectId || undefined,
+    socketPath,
+    cliType,
+  });
+  return db.prepare('SELECT * FROM sessions WHERE id = ?').get(session.id) as Session;
+}
+
+/**
  * Re-adopt a released OctoAlly tmux session (popped-out and now being brought back).
  * Changes status from 'released' to 'detached' and reconnects via the existing reconnect path.
  */
@@ -2122,10 +2301,21 @@ async function readoptReleasedSession(tmuxName: string, _projectId?: string): Pr
   if (!session || session.status !== 'released') return null;
 
   // Verify tmux session is still alive (check all servers)
-  const serverArgs = tmuxArgsForSession(sessionId);
+  const serverArgs = IS_WIN ? [] : tmuxArgsForSession(sessionId);
   if (!(await tmuxExistsAsync(sessionId))) {
     db.prepare(`UPDATE sessions SET status = 'failed', updated_at = datetime('now') WHERE id = ?`).run(sessionId);
     return null;
+  }
+
+  const dashboardCols = session.terminal_cols || 120;
+  if (IS_WIN) {
+    // Kick the popped-out console off the session and size it back to the dashboard.
+    await winmux.detachClients(tmuxName).catch(() => 0);
+    await winmux.resizeSession(tmuxName, dashboardCols).catch(() => {});
+    db.prepare(`UPDATE sessions SET status = 'detached', updated_at = datetime('now') WHERE id = ?`).run(sessionId);
+    const reconnected = await reconnectSession(sessionId, { skipPipePaneReplay: true });
+    if (!reconnected) return null;
+    return db.prepare('SELECT * FROM sessions WHERE id = ?').get(sessionId) as Session;
   }
 
   // Detach all external clients (e.g. tilix) from the tmux session
@@ -2145,7 +2335,6 @@ async function readoptReleasedSession(tmuxName: string, _projectId?: string): Pr
   // terminal_cols in the DB still reflects the last dashboard width (the worker
   // was dead during the external session, so resizeSession was never called).
   // This ensures capture-pane grabs content at the correct dashboard width.
-  const dashboardCols = session.terminal_cols || 120;
   try {
     await execFileAsync('tmux', [...serverArgs, 'resize-window', '-t', tmuxName, '-x', String(dashboardCols)]);
     // Unset window-size=manual that resize-window implicitly sets.
@@ -2173,7 +2362,8 @@ export async function spawnAdopt(sessionId: string, socketPath: string, projectP
   // This disconnects the user's real terminal so it doesn't fight with OctoAlly.
   // We use pkill to SIGHUP dtach clients matching the socket path.
   // SIGHUP on a dtach client causes a clean detach (the master stays alive).
-  try {
+  // (Windows: the worker detaches winmux clients itself before attaching.)
+  if (!IS_WIN) try {
     // Find dtach -a processes for this specific socket path
     const { stdout: psOut } = await execFileAsync('ps', ['aux'], { encoding: 'utf8' });
     for (const line of psOut.split('\n')) {

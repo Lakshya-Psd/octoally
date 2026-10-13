@@ -4,6 +4,7 @@ import { JsonlReader } from '../lib/jsonl-reader.js';
 import { readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { claudeProjectDirName } from '../utils/platform.js';
 
 /* ================================================================
    Types
@@ -165,7 +166,7 @@ export class SessionStateTracker {
     if (this._jsonl.hasFile()) return true;
     if (!this._projectPath) return false;
 
-    const sanitized = this._projectPath.replace(/\//g, '-');
+    const sanitized = claudeProjectDirName(this._projectPath);
     const claudeDir = join(homedir(), '.claude', 'projects', sanitized);
 
     try {

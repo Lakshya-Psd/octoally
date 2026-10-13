@@ -4,6 +4,7 @@ import { homedir } from 'os';
 import { join, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { fileURLToPath } from 'url';
+import { IS_WIN, toClientPath } from '../utils/platform.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -66,7 +67,9 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
     return { ok: true, settings: current };
   });
 
-  const STATUSLINE_SCRIPT = 'octoally-statusline.sh';
+  // Windows has no bash/jq by default, so it gets the Node port of the script.
+  const STATUSLINE_SCRIPT = IS_WIN ? 'octoally-statusline.cjs' : 'octoally-statusline.sh';
+  const STATUSLINE_SOURCE = IS_WIN ? 'statusline.cjs' : 'statusline.sh';
   const STATUSLINE_MARKER = '// octoally-managed-statusline';
 
   function getGlobalSettingsPath(): string {
@@ -103,22 +106,23 @@ export const settingsRoutes: FastifyPluginAsync = async (app) => {
   // Install OctoAlly statusline to global ~/.claude/settings.json
   app.post('/settings/statusline/install', async () => {
     const scriptDest = getStatuslineScriptPath();
-    const scriptSrc = join(__dirname, '..', 'data', 'statusline.sh');
+    const scriptSrc = join(__dirname, '..', 'data', STATUSLINE_SOURCE);
 
     // Copy script
     mkdirSync(dirname(scriptDest), { recursive: true });
     writeFileSync(scriptDest, readFileSync(scriptSrc, 'utf-8'), { mode: 0o755 });
 
-    // Update global settings.json
+    // Update global settings.json. On Windows the command is `node "<script>"`,
+    // which works whichever shell Claude Code uses (Git Bash, cmd or PowerShell).
     const settings = readGlobalSettings();
     settings.statusLine = {
       type: 'command',
-      command: scriptDest,
+      command: IS_WIN ? `node "${toClientPath(scriptDest)}"` : scriptDest,
       _comment: STATUSLINE_MARKER,
     };
     writeGlobalSettings(settings);
 
-    return { ok: true, scriptPath: scriptDest };
+    return { ok: true, scriptPath: toClientPath(scriptDest) };
   });
 
   // Uninstall OctoAlly statusline from global ~/.claude/settings.json
