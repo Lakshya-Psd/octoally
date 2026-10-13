@@ -120,6 +120,13 @@ try {
   writeFileSync(binFile, Buffer.from([1, 0, 2, 3]));
   const rb = await api('GET', `/files/read?path=${encodeURIComponent(binFile)}`);
   check('binary files are flagged, not shown as text', rb.body.binary === true, JSON.stringify(rb.body).slice(0, 120));
+  const png = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
+  const pasted = await fetch(`${BASE}/api/files/paste-image`, { method: 'POST', headers: { 'Content-Type': 'image/png' }, body: png });
+  const pastedBody = await pasted.json();
+  check('pasted image is saved for the CLI', pasted.status === 200 && /\\\.octoally\\pastes\\paste-.*\.png$/.test(pastedBody.path || '')
+    && existsSync(pastedBody.path) && readFileSync(pastedBody.path).equals(png), JSON.stringify(pastedBody));
+  const notImage = await fetch(`${BASE}/api/files/paste-image`, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: 'hi' });
+  check('paste-image refuses non-images', notImage.status === 400 || notImage.status === 415, String(notImage.status));
 
   // 1. Terminal session
   const s1 = await api('POST', '/sessions', { project_path: project.path, project_id: project.id, mode: 'terminal', task: 'Terminal' });

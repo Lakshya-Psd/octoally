@@ -240,9 +240,37 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       w.send(JSON.stringify({ type: 'input', data: text, paste: true }));
       return true;
     };
+    // A pasted image (e.g. a screenshot) is saved by the server and its path
+    // pasted instead — Claude Code attaches an image given by path.
+    const sendImage = (image: Blob): void => {
+      api.files.pasteImage(image)
+        .then(({ path }) => { sendPaste(/\s/.test(path) ? `"${path}" ` : `${path} `); })
+        .catch((err) => console.error('[Terminal] image paste failed:', err));
+    };
+    // The clipboard's image, but only when it holds no text: apps like Excel
+    // put both on the clipboard, and then the text is what's meant.
+    const imageFromTransfer = (data: DataTransfer | null): File | null => {
+      if (!data || data.getData('text')) return null;
+      for (const item of Array.from(data.items)) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) return item.getAsFile();
+      }
+      return null;
+    };
     // Read the clipboard explicitly and paste it. Used where no native paste
     // event is available (Ctrl+Shift+V keydown we cancel, right-click).
-    const pasteFromClipboard = () => {
+    const pasteFromClipboard = async () => {
+      try {
+        if (typeof navigator.clipboard?.read === 'function') {
+          const items = await navigator.clipboard.read();
+          const hasText = items.some((i) => i.types.includes('text/plain'));
+          const imageItem = hasText ? undefined : items.find((i) => i.types.some((t) => t.startsWith('image/')));
+          if (imageItem) {
+            const type = imageItem.types.find((t) => t.startsWith('image/'))!;
+            sendImage(await imageItem.getType(type));
+            return;
+          }
+        }
+      } catch { /* read() refused or unsupported — fall back to text */ }
       navigator.clipboard?.readText().then(sendPaste).catch(() => {});
     };
     const canReadClipboard = typeof navigator.clipboard?.readText === 'function';
@@ -301,6 +329,13 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
     const pasteTarget = xtermTextarea || containerRef.current;
     const pasteHandler = (ev: Event) => {
       const ce = ev as ClipboardEvent;
+      const image = imageFromTransfer(ce.clipboardData);
+      if (image) {
+        sendImage(image);
+        ce.preventDefault();
+        ce.stopImmediatePropagation();
+        return;
+      }
       if (sendPaste(ce.clipboardData?.getData('text'))) {
         ce.preventDefault();
         ce.stopImmediatePropagation();

@@ -126,6 +126,13 @@ export const api = {
       fetchJSON<{ exists: boolean; path: string; type?: 'file' | 'directory'; size?: number; mtimeMs?: number }>(
         `/files/stat?path=${encodeURIComponent(path)}`
       ),
+    /** Save an image pasted into a terminal; returns where it was saved. */
+    pasteImage: (image: Blob) =>
+      fetchJSON<{ ok: boolean; path: string; size: number }>('/files/paste-image', {
+        method: 'POST',
+        headers: { 'Content-Type': image.type },
+        body: image,
+      }),
     /** Open with the OS default app, or (reveal) show it selected in the file manager. */
     openExternal: (path: string, reveal = false) =>
       fetchJSON<{ ok: boolean }>('/files/open', {

@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
-import { readdir, stat, readFile, writeFile, rm, rename, cp, open } from 'fs/promises';
+import { readdir, stat, readFile, writeFile, rm, rename, cp, open, mkdir } from 'fs/promises';
+import { homedir } from 'os';
 import { win32 } from 'path';
 import { join, resolve, extname, dirname, basename, isInside } from '../utils/xpath.js';
 import { exec, spawn } from 'child_process';
@@ -55,7 +56,28 @@ function launchForFile(filePath: string, mode: 'open' | 'reveal'): Promise<void>
   });
 }
 
+
+/** Where images pasted into a terminal are saved, so the CLI can attach them by path. */
+const PASTE_DIR = () => join(homedir(), '.octoally', 'pastes');
+const PASTE_KEEP_MS = 7 * 24 * 60 * 60 * 1000;
+const PASTE_EXT: Record<string, string> = {
+  'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/bmp': 'bmp',
+};
+
+/** Drop pasted images older than a week (best effort). */
+async function prunePastes(dir: string): Promise<void> {
+  const now = Date.now();
+  for (const name of await readdir(dir).catch(() => [] as string[])) {
+    const p = join(dir, name);
+    const s = await stat(p).catch(() => null);
+    if (s?.isFile() && now - s.mtimeMs > PASTE_KEEP_MS) await rm(p, { force: true }).catch(() => {});
+  }
+}
+
 export const fileRoutes: FastifyPluginAsync = async (app) => {
+  // Raw image bodies, for /files/paste-image only (this plugin's scope).
+  app.addContentTypeParser(/^image\//, { parseAs: 'buffer', bodyLimit: 25 * 1024 * 1024 }, (_req, body, done) => done(null, body));
+
   // File metadata (used by the viewer to auto-refresh previews and by terminal file links)
   app.get<{
     Querystring: { path: string };
@@ -74,6 +96,25 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
     } catch {
       return { exists: false, path: resolved };
     }
+  });
+
+
+  // Save an image pasted into a terminal; the client types the returned path
+  // into the session (Claude Code attaches an image given by path).
+  app.post('/files/paste-image', async (req, reply) => {
+    const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+    const ext = PASTE_EXT[type];
+    const body = req.body;
+    if (!ext || !Buffer.isBuffer(body) || body.length === 0) {
+      return reply.status(400).send({ error: 'Send a PNG, JPEG, GIF, WebP or BMP image as the request body' });
+    }
+    const dir = PASTE_DIR();
+    await mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+    const path = join(dir, `paste-${stamp}-${Math.random().toString(36).slice(2, 6)}.${ext}`);
+    await writeFile(path, body);
+    void prunePastes(dir);
+    return { ok: true, path: process.platform === 'win32' ? win32.normalize(path) : path, size: body.length };
   });
 
   // Open a file in its default app (Photos, video player, browser, PDF reader ...)
