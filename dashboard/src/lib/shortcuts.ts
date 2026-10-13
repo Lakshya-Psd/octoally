@@ -191,7 +191,7 @@ export function getAction(id: string): ActionDef | undefined {
 
 /* ---------- Key normalization ------------------------------------------ */
 
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform);
+export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform);
 
 /**
  * Canonical combo string format: `mod1+mod2+...+key`, modifiers alphabetized.

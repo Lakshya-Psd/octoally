@@ -19,6 +19,7 @@ import type { ReadStream } from 'fs';
 import { loadPty, type IPty, type IPtyExit, type PtySpawnOptions } from '../lib/pty.js';
 import * as winmux from '../winmux/client.js';
 import { buildConfiguredCommand, defaultShell, type CommandSpec } from '../winmux/command.js';
+import { stripHostAgentEnv } from '../utils/session-env.js';
 
 const execFileAsync = promisify(execFile);
 const IS_WIN = process.platform === 'win32';
@@ -33,7 +34,7 @@ const pty = {
  *  - PORT / OCTOALLY_*_PORT: prevents sandbox port assignments from overriding
  *    child project .env files (dotenv won't override existing env vars) */
 function sessionEnv(): Record<string, string> {
-  const { NODE_ENV, PORT, OCTOALLY_API_PORT, OCTOALLY_DASH_PORT, ...rest } = process.env;
+  const { NODE_ENV, PORT, OCTOALLY_API_PORT, OCTOALLY_DASH_PORT, ...rest } = stripHostAgentEnv(process.env);
   return {
     ...rest,
     TERM: 'xterm-256color',

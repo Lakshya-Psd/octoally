@@ -6,6 +6,7 @@ import { ClaudeIcon, CodexIcon } from './CliIcons';
 import { SessionMicButton } from './SessionMicButton';
 import { shortenHome } from '../lib/paths';
 import { usePlatform } from '../lib/platform';
+import { IS_MAC } from '../lib/shortcuts';
 
 interface SessionLauncherProps {
   project: Project;
@@ -196,7 +197,7 @@ function TaskModal({
             />
             <div className="flex items-center justify-between mt-1.5">
               <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
-                Cmd+Enter to launch
+                {IS_MAC ? 'Cmd' : 'Ctrl'}+Enter to launch
               </p>
               <SessionMicButton
                 small

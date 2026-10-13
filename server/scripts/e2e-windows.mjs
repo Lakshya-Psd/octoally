@@ -6,7 +6,7 @@
 // Runs the compiled server (npm run build first) on port 42099 with a throwaway
 // home directory, so your real ~/.claude and ~/.octoally are not touched.
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -164,14 +164,36 @@ try {
   check('adopted external session works', await te.waitFor('ext-adopted'));
   check('external session renamed to of-<id>', mux('ls').includes(`of-${extId}`) && !mux('ls').includes('ext-e2e'));
 
-  // 5. Kill both
+  // 5. Status line installer (writes only into the throwaway home)
+  const sl = await api('POST', '/settings/statusline/install');
+  check('status line install', sl.body.ok === true, JSON.stringify(sl.body));
+  const settings = JSON.parse(readFileSync(join(home, '.claude', 'settings.json'), 'utf8'));
+  const slCmd = settings.statusLine?.command || '';
+  check('status line command is node + script', /^node ".*octoally-statusline\.cjs"$/.test(slCmd), slCmd);
+  const sample = JSON.stringify({ workspace: { current_dir: project.path }, model: { id: 'claude-opus-4-6' }, cost: { total_duration_ms: 65000 } });
+  const gitBash = 'C:\\Program Files\\Git\\bin\\bash.exe';
+  const shells = [
+    ['cmd', () => execFileSync('cmd.exe', ['/d', '/s', '/c', `"${slCmd}"`], { input: sample, encoding: 'utf8', windowsVerbatimArguments: true, windowsHide: true })],
+    ['PowerShell', () => execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', slCmd], { input: sample, encoding: 'utf8', windowsHide: true })],
+    ['Git Bash', () => execFileSync(gitBash, ['-c', slCmd], { input: sample, encoding: 'utf8', windowsHide: true })],
+  ];
+  for (const [name, run] of shells) {
+    if (name === 'Git Bash' && !existsSync(gitBash)) continue;
+    let out = '';
+    try { out = strip(run()); } catch (err) { out = `ERROR ${err.message}`; }
+    check(`status line runs from ${name}`, out.includes('Opus 4.6') && out.includes('1m'), out.slice(0, 120));
+  }
+  const slu = await api('POST', '/settings/statusline/uninstall');
+  check('status line uninstall', slu.body.ok === true);
+
+  // 6. Kill both
   await api('DELETE', `/sessions/${id}`);
   await api('DELETE', `/sessions/${extId}`);
   await sleep(2500);
   const ls2 = mux('ls');
   check('killed sessions gone from winmux', !ls2.includes(`of-${id}`) && !ls2.includes(`of-${extId}`), ls2.trim());
 
-  // 6. Graceful shutdown
+  // 7. Graceful shutdown
   await api('POST', '/shutdown');
   await sleep(1500);
   let down = false;

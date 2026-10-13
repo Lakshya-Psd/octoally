@@ -584,8 +584,10 @@ export const projectRoutes: FastifyPluginAsync = async (app) => {
             await walkDir(fullPath, entry.name);
           } else if (entry.name.endsWith('.md')) {
             try {
-              const content = await readFile(fullPath, 'utf-8');
-              const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+              // Strip a UTF-8 BOM (Windows editors add one)
+              const content = (await readFile(fullPath, 'utf-8')).replace(/^﻿/, '');
+              // \r? — agent files saved on Windows have CRLF line endings
+              const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
               if (frontmatterMatch) {
                 const fm = frontmatterMatch[1];
                 const name = fm.match(/^name:\s*(.+)$/m)?.[1]?.trim()?.replace(/^["']|["']$/g, '');
