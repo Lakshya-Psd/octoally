@@ -3,19 +3,18 @@
 Updated: 2026-10-13. Ledger for the native Windows port. See `../../PLAN.md` (master folder) for the plan and why, and `WINDOWS.md` for how to use it; this file is only what and when.
 
 ## In progress
-- [~] Voice dictation inside the desktop app — the pieces are proven separately: 5 microphones listed, 2s recording captured at 32 KB/s, whisper.cpp for Windows downloaded and transcribed a test WAV in 0.8s. Not yet tried by actually speaking into the app.
-- [~] Desktop tray menu — app launched and loaded the dashboard from the running server; server start/stop/auto-start functions tested by the helper. Menu items not clicked by hand.
+- [~] Desktop tray menu — installed app runs and started its own server; menu items not clicked by hand.
 - [~] Claude event hook as a Node script — built; the route that installs it is unused upstream too, so nothing in the UI reaches it.
 
 ## Blocked
-- [!] Codex sessions — blocked by Codex CLI not being installed on this PC. Unblocks when `npm install -g @openai/codex` is run; the launch path is the same as Claude's (npm wrappers are unwrapped and tested).
-- [!] A Claude session doing real work — blocked by your standalone Claude Code sign-in having expired ("Login expired · Please run /login"). Unblocks when you run `claude` in a terminal and `/login`.
+- [!] A Claude session doing real work — blocked by the `claude` command-line tool reporting "Login expired / Not logged in" inside OctoAlly (the Claude desktop app itself is signed in; that's a separate login). Unblocks when Lakshya runs `claude` in a terminal and, if asked, `/login`.
 
 ## Next
 - [ ] Optional: run upstream's Linux build in WSL to confirm nothing regressed for Linux — medium
   **Why:** every change is guarded to Windows, but Linux/macOS weren't re-run. Only matters if this fork will be shared with Linux/macOS users.
 
 ## Done
+- [x] Desktop app installed and set to start at login — installed per-user to `%LOCALAPPDATA%\Programs\OctoAlly` (Start menu shortcut); Run key `com.aigenius.octoally` = `"…\OctoAlly.exe" --hidden`; launched from Explorer it started the server (PID 58704) and opened its window. Lakshya's call.
 - [x] `octoally update` on a branch with no remote — `update --force` reinstalled and rebuilt everything and restarted the server (6deff33).
 - [x] Windows docs — `WINDOWS.md` + README platform row (1d7cf0b).
 - [x] Dashboard click-through on Windows — added a project by typing `C:\...\octoally\` (stored as `C:/...`, name auto-filled, git branch detected); "This PC" drive list; terminal ran your PowerShell profile and `git log`; file explorer opened files; git panel showed a side-by-side diff; Active Sessions grid streamed 3 sessions.
@@ -39,13 +38,12 @@ Updated: 2026-10-13. Ledger for the native Windows port. See `../../PLAN.md` (ma
 - [x] Cloned upstream v1.0.89 into `octoally/` on branch `windows-port` (55f6d61).
 
 ## Dropped
-_(nothing)_
+- [-] Codex sessions — Lakshya doesn't use Codex (OpenAI's tool), so it won't be installed or tested. The launch path exists and shares tested code with Claude's.
+- [-] Voice dictation testing in the desktop app — Lakshya already uses Handy for dictation. The feature is built and its parts were proven (5 mics listed, 32 KB/s capture, whisper.cpp transcribed a test WAV), but it won't be tested by speaking.
 
 ## Decisions waiting on the owner
 | | |
 |---|---|
 | Sign in to Claude Code | Run `claude` once in a terminal and `/login`; sessions in OctoAlly use that sign-in. |
-| Install the desktop app? | Installer is at `desktop-electron\release\OctoAlly Setup 1.0.89.exe` (unsigned, so Windows SmartScreen will warn). Not installed for you. |
-| Auto-start at login? | Off. Turn on with `octoally install-service` or the desktop app's "Open OctoAlly at Login". |
-| Status bar in Claude Code | Not installed — it would replace any status line in your `~/.claude/settings.json`. Settings → Install Status Bar when you want it. |
+| Status bar in Claude Code | Optional. A line under Claude Code's input box showing folder, git branch, session time, cost and how full the context is. You have none set, so nothing would be replaced. Settings → Install Status Bar if you want it. |
 | Publishing | Personal build; the Commons Clause license forbids selling it. Sharing, a public fork or offering it upstream is your call. Note the desktop installer bundles ffmpeg (GPL). |
