@@ -120,6 +120,7 @@ Build it with `install.ps1 -Desktop`, or run `npm run dist:win` in `desktop-elec
 - **Port 42010 already in use.** Use `octoally stop`, or change the port in Settings.
 - **Sessions not starting / daemon problems.** Run `octoally mux daemon-status` and read `%USERPROFILE%\.octoally\winmux.log`. `octoally mux kill-server` stops the daemon and **all** sessions.
 - **Boxes instead of icons in the terminal.** Your prompt uses Nerd Font glyphs that the browser font lacks. This is cosmetic.
+- **`octoally update` says there's no upstream branch.** `update` runs `git pull` on the branch you're on, so the branch has to track a remote, e.g. your own fork: `git push -u <your-remote> windows-port`. To pick up new upstream OctoAlly releases, merge them in: `git fetch origin`, then `git merge origin/main`, then `octoally update --force`.
 - **npm tools give "running scripts is disabled" in a PowerShell terminal.** That's PowerShell's execution policy for npm's `.ps1` wrappers, the same as in any PowerShell window:
   ```powershell
   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned

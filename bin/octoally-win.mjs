@@ -727,8 +727,23 @@ async function cmdUpdate(args = []) {
   const branch = String(git(['rev-parse', '--abbrev-ref', 'HEAD']).stdout || '').trim();
   const before = head();
 
-  logInfo(`Pulling latest changes (branch ${branch || 'unknown'})...`);
-  const pull = git(['pull', '--ff-only'], { stdio: 'inherit', encoding: undefined });
+  // A local branch with no remote (e.g. a fork you merge upstream into by hand):
+  // nothing to pull, but --force still reinstalls dependencies and rebuilds.
+  const upstream = git(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}']);
+  if (upstream.status !== 0) {
+    if (!force) {
+      logError(`Branch ${branch || 'unknown'} does not track a remote, so there is nothing to pull.`);
+      logInfo('Set one with: git push -u <remote> ' + (branch || '<branch>'));
+      logInfo("Or, after merging changes yourself, rebuild with: octoally update --force");
+      return 1;
+    }
+    logWarn(`Branch ${branch || 'unknown'} does not track a remote - skipping git pull, rebuilding only.`);
+  }
+
+  const pull = upstream.status !== 0
+    ? { status: 0 }
+    : (logInfo(`Pulling latest changes (branch ${branch || 'unknown'})...`),
+       git(['pull', '--ff-only'], { stdio: 'inherit', encoding: undefined }));
   if (pull.status !== 0) {
     logError('git pull --ff-only failed - nothing was changed.');
     logInfo('Common causes: local changes (commit or stash them), a diverged branch, or no upstream branch.');
