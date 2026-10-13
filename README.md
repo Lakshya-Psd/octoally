@@ -90,6 +90,7 @@
 |----------|--------|
 | **Linux** (Ubuntu/Debian) | Fully supported |
 | **macOS** (Intel & Apple Silicon) | Fully supported |
+| **Windows** 10 (1809+) / 11 | Fully supported, native (no WSL) — see [WINDOWS.md](WINDOWS.md): double-click `install.cmd` |
 
 ### Prerequisites
 
