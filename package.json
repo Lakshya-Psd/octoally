@@ -30,8 +30,9 @@
     "build:server": "cd server && npm run build",
     "build:dashboard": "cd dashboard && npm run build",
     "start": "cd server && npm start",
-    "install:all": "npm install && cd server && npm install && cd ../dashboard && npm install",
-    "clean": "cd server && rm -rf dist && cd ../dashboard && rm -rf dist",
+    "install:all": "npm install && npm --prefix server install && npm --prefix dashboard install",
+    "install:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1",
+    "clean": "node -e \"for (const d of ['server/dist','dashboard/dist']) require('fs').rmSync(d,{recursive:true,force:true})\"",
     "deploy": "bash scripts/deploy-dev.sh",
     "deploy:ui": "npm run build:dashboard && rsync -a --delete dashboard/dist/ \"$HOME/octoally/dashboard/dist/\""
   },

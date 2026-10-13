@@ -9,6 +9,7 @@
  *   Worker → Parent: ready, output, exit, error, replay-chunk, replay-end
  */
 
+import '../utils/hide-windows.js';
 import { execFile, execFileSync } from 'child_process';
 import { promisify } from 'util';
 import { existsSync, unlinkSync, mkdirSync, createReadStream, readFileSync, readdirSync, statSync, appendFileSync } from 'fs';

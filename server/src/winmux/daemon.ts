@@ -7,6 +7,7 @@
  * little while after the last session ends.
  */
 
+import '../utils/hide-windows.js';
 import { createServer, type Socket } from 'net';
 import { spawn, execFile } from 'child_process';
 import { createRequire } from 'module';

@@ -4,6 +4,13 @@
 
 set -euo pipefail
 
+# Windows (Git Bash / MSYS / Cygwin): use the native Windows CLI instead.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    exec node "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -W 2>/dev/null || pwd)/octoally-win.mjs" "$@"
+    ;;
+esac
+
 # Resolve install directory (follow symlinks to find the real script location)
 REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"

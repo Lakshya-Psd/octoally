@@ -3,44 +3,34 @@
 Updated: 2026-10-13. Ledger for the native Windows port. See `../../PLAN.md` (master folder) for the full plan and why; this file is only what and when.
 
 ## In progress
-_(nothing yet)_
+- [~] Windows CLI (`octoally start/stop/restart/status/update/logs/install-service`) + `install.ps1` — being written by a helper; needs its own test run.
+- [~] Desktop app on Windows (server control, single instance, tray icon, installer build) — being written by a helper; needs a real launch.
+- [~] Voice dictation on Windows (ffmpeg mic capture, prebuilt whisper.cpp) — being written by a helper; needs a mic test.
+- [~] Dashboard Windows fixes (paths, drive picker, Ctrl+C/V/right-click, wording) — 6ba67a7, builds with 0 errors; not yet clicked through in a browser.
+- [~] Server OS integrations: open URL / folder / terminal — b4962f1, built; buttons not yet clicked. (PATH discovery, temp paths, process kill and Claude history naming are covered by the e2e run below.)
+- [~] Claude event hook as a Node script — built; the hook route is unused upstream too, so it is not reachable from the UI.
 
 ## Blocked
 _(nothing)_
 
 ## Next
-- [ ] Cross-platform build scripts + Windows dependency install — small
-  **Why:** the server's build step uses Linux `cp -r`, so it can't even be built on Windows. Nothing else can be tested until it builds. (Lakshya's goal: full Windows support.)
-- [ ] winmux: Windows replacement for tmux (session daemon, client, `octoally-mux` CLI) — large
-  **Why:** tmux is what keeps sessions alive when the server restarts, lets you pop a session out to your own terminal and bring it back, and gives a clean screen snapshot. Windows has no tmux, so without this every session dies on restart and pop-out doesn't exist.
-- [ ] Windows command launcher (find `claude`/`codex`, handle npm `.cmd` wrappers, safe quoting) — medium
-  **Why:** on Linux the task text is handed to bash. On Windows that would break on quotes, `%`, `&` and multi-line prompts, so sessions would start with a mangled prompt or not at all.
-- [ ] Wire winmux into the server (spawn, reconnect, capture, kill, release, adopt, discover) — large
-  **Why:** the server talks to tmux in ~90 places. Each needs a Windows path so sessions, agents and terminals behave the same as on Linux.
-- [ ] Pop-out to Windows Terminal and re-adopt — medium
-  **Why:** a headline feature ("pop out to your system terminal, then bring it back"). On Linux it opens tilix/gnome-terminal; Windows needs Windows Terminal or a console window.
-- [ ] Server OS integrations: open URL / folder / terminal, PATH discovery, temp paths, process-tree kill, Claude history folder naming — medium
-  **Why:** buttons like "Open in file manager" and "Open in terminal" call Linux tools, and the server can't find Claude's history files on Windows because it names the folder the Linux way.
-- [ ] Windows paths end-to-end (server returns `C:/...`, folder picker can switch drives) — medium
-  **Why:** the UI splits paths on `/` and checks "starts with /" for absolute paths, so Windows paths show up as whole strings, trigger false warnings, and you can't reach other drives.
-- [ ] Status line + Claude event hook as Node scripts — small
-  **Why:** both are bash scripts that need `jq`/`mktemp`, which a normal Windows PC doesn't have, so the status bar and live tool-event feed would silently do nothing.
-- [ ] Dashboard Windows fixes (path helpers, drive switching, Ctrl+C/Ctrl+V/right-click in terminals, wording, update text) — medium
-  **Why:** the UI assumes Linux habits: copy is Ctrl+Shift+C, the text mentions tmux and bash, and it warns that `C:\...` isn't an absolute path.
-- [ ] Windows CLI (`octoally start/stop/restart/status/update/logs/install-service`) + `install.ps1` — medium
-  **Why:** the `octoally` command and installer are bash and systemd/launchd only. Windows needs its own way to start, stop and auto-start the server.
-- [ ] Desktop app on Windows (server control, single instance, tray icon, installer build) — medium
-  **Why:** the tray app finds and controls the server with Linux commands (`realpath`, `fuser`, `pkexec`), so on Windows it can't start or stop anything.
-- [ ] Voice dictation on Windows (ffmpeg mic capture, prebuilt whisper.cpp) — medium
-  **Why:** mic capture uses Linux/mac audio tools and whisper is compiled from source with cmake. Today it throws "Unsupported platform" on Windows.
-- [ ] End-to-end verification on this PC (browser + desktop app) — large
-  **Why:** built is not proven. Every feature has to be clicked through on real Windows before it counts as done.
+- [ ] Real Claude Code + Codex sessions and agent sessions from the dashboard — medium
+  **Why:** the e2e test used PowerShell sessions. Claude's own screen drawing, paste and `/resume` must be seen working inside OctoAlly on Windows.
+- [ ] End-to-end click-through in the browser and the desktop app — large
+  **Why:** built is not proven. Every button has to be tried on real Windows before it counts as done.
 - [ ] Windows docs (`WINDOWS.md` + README section) — small
   **Why:** you and anyone you share it with need to know how to install, run and troubleshoot it on Windows.
 
 ## Done
+- [x] Status line as a Node script — sample Claude data renders folder, branch, 1h2m, +120/-30, 50% bar, $2.35, "Opus 5.5 200k".
+- [x] Windows paths end-to-end on the server — e2e: `C:\...\` typed with backslashes stored as `C:/...`; "This PC" lists C: and G:; `C:/` goes up to the drive list.
+- [x] Pop-out to Windows Terminal and re-adopt — e2e: pop-out opened Windows Terminal attached to the session; re-adopt detached it and typing worked in the dashboard again.
+- [x] winmux wired into the server — e2e (`server/scripts/e2e-windows.mjs`, 24/24 pass): terminal streams in the project folder; server killed, session survives, comes back with its screen; external `octoally mux new` session adopted; kill and graceful shutdown work.
+- [x] Windows command launcher — winmux test: prompts containing quotes, `%`, `&`, newlines, Unicode and trailing backslashes reached the program exactly; npm `.cmd` tools run as `node <script>`; `claude` resolves to `~/.local/bin/claude.exe`.
+- [x] winmux: Windows replacement for tmux — b4962f1; live test: create, stream, snapshot, detach, resize, detach-others and kill all pass.
+- [x] Cross-platform build scripts + Windows dependency install — server installs and builds on Windows (node-pty 1.1.0 ConPTY, better-sqlite3 12).
 - [x] Mapped every Linux/macOS dependency across server, dashboard, desktop app and CLI. Evidence: audit notes folded into `PLAN.md`.
-- [x] Proved the native pieces load on this PC's Node 24: node-pty 1.1.0 ran `cmd.exe` through ConPTY (output "hi from conpty"), and better-sqlite3 12 opened a database (SQLite 3.53.2).
+- [x] Proved the native pieces load on this PC's Node 24: node-pty 1.1.0 ran `cmd.exe` through ConPTY, better-sqlite3 12 opened a database.
 - [x] Cloned upstream v1.0.89 into `octoally/` on branch `windows-port`. Evidence: commit 55f6d61.
 
 ## Dropped
@@ -50,3 +40,4 @@ _(nothing)_
 | | |
 |---|---|
 | Publishing | This is a personal Windows build. The license (Commons Clause) forbids selling it. Whether to share it, fork it publicly or offer it upstream is your call. |
+| First real run touches your Claude setup | Like on Linux, OctoAlly copies its 36 built-in agents into `~/.claude/agents/` on first start (only files that don't exist yet). The status-bar installer, if you click it, edits `~/.claude/settings.json`. |

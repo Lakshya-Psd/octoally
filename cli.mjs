@@ -10,6 +10,39 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createInterface } from "node:readline";
 
+// Windows: the npm release only ships Linux/macOS builds. A native Windows
+// install (install.cmd / scripts\install.ps1 from the Windows fork) records
+// itself in %USERPROFILE%\.octoally\install.json — forward to its CLI.
+if (process.platform === "win32") {
+  let winInstall = null;
+  try {
+    winInstall = JSON.parse(
+      readFileSync(join(homedir(), ".octoally", "install.json"), "utf8").replace(/^﻿/, ""),
+    );
+  } catch {}
+  const winCli = winInstall && winInstall.cli;
+  if (winCli && existsSync(winCli)) {
+    const winArgs = process.argv.slice(2);
+    const c = spawn(process.execPath, [winCli, ...(winArgs.length ? winArgs : ["start"])], {
+      stdio: "inherit",
+      windowsHide: true,
+    });
+    c.on("exit", (code) => process.exit(code ?? 1));
+    c.on("error", (err) => {
+      console.error(`[OctoAlly] Failed to run ${winCli}: ${err.message}`);
+      process.exit(1);
+    });
+    await new Promise(() => {});
+  }
+  const tag = (code) => (process.stderr.isTTY ? `\x1b[${code}m[OctoAlly]\x1b[0m` : "[OctoAlly]");
+  console.error(`${tag(31)} The npm release of OctoAlly only ships Linux and macOS builds.`);
+  console.error(`${tag(36)} On Windows, install from the Windows fork source instead:`);
+  console.error("  1. Clone or download the OctoAlly Windows fork.");
+  console.error("  2. Double-click install.cmd in it (or run: powershell -ExecutionPolicy Bypass -File scripts\\install.ps1).");
+  console.error("  After that, `octoally` (and `npx octoally`) use that install.");
+  process.exit(1);
+}
+
 // Re-entrancy guard: install.sh calls `octoally` commands which npx resolves
 // back to this script. Detect this and proxy to the real CLI instead.
 if (process.env.__OCTOALLY_NPX_ACTIVE === "1") {

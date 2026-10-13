@@ -4,6 +4,8 @@ process.env.UV_THREADPOOL_SIZE = '16';
 // Enrich PATH for desktop-launched environments (task manager, dock, app menu).
 // Interactive shells load nvm/fnm/volta via .bashrc/.zshrc, but desktop-launched
 // processes inherit the bare session environment which typically lacks these.
+// Windows: keep every child process windowless (must run before anything spawns).
+import './utils/hide-windows.js';
 import { enrichProcessPath } from './utils/enrich-path.js';
 enrichProcessPath();
 
