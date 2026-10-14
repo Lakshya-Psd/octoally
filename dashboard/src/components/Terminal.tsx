@@ -4,7 +4,8 @@ import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
-import { RotateCcw, ExternalLink, ZoomIn, ZoomOut } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { RotateCcw, TerminalSquare, ZoomIn, ZoomOut } from 'lucide-react';
 import { useSpeechStore } from '../lib/speech';
 import { isKeyboardNavActive } from '../lib/shortcuts';
 import { api } from '../lib/api';
@@ -54,9 +55,15 @@ interface TerminalProps {
   projectPath?: string;
   /** Called when a file path in the output is clicked (opens it in the file viewer). */
   onOpenFile?: (path: string) => void;
+  /** Where the buttons (zoom, pop out, refresh) draw: a host's title bar, null
+   *  while it mounts. Left out, they get a strip above the terminal. */
+  toolbarSlot?: HTMLElement | null;
+  /** Where the pop-out button draws, when the host groups it with its own
+   *  open-elsewhere buttons; left out, it follows the others. */
+  popOutSlot?: HTMLElement | null;
 }
 
-export function Terminal({ sessionId, visible = true, suspended = false, passiveResize = false, hideCursor = false, cliType, onExit, onReconnect, onPopOut, projectPath, onOpenFile }: TerminalProps) {
+export function Terminal({ sessionId, visible = true, suspended = false, passiveResize = false, hideCursor = false, cliType, onExit, onReconnect, onPopOut, projectPath, onOpenFile, toolbarSlot, popOutSlot }: TerminalProps) {
   // Latest values for the file-link provider, which is registered once per terminal.
   const projectPathRef = useRef(projectPath);
   projectPathRef.current = projectPath;
@@ -861,11 +868,31 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
     return () => window.removeEventListener('octoally:focus-terminal', handler);
   }, [sessionId]);
 
-  return (
-    <div className="h-full relative group/terminal flex flex-col" onClick={() => termRef.current?.focus()}>
-      {/* The buttons get a strip of their own: floating over the terminal they
-          covered its top-right corner, where Claude draws a panel's close button. */}
-      <div className="h-7 shrink-0 flex items-center justify-end gap-2 px-3" style={{ background: '#0f1117' }}>
+  // Buttons: in the host's title bar when it gives a slot (a grid tile), else in
+  // a strip of their own above the terminal; floating over it they covered its
+  // top-right corner, where Claude draws a panel's close button.
+  const inSlot = toolbarSlot !== undefined;
+  const btnClass = inSlot
+    ? 'flex items-center px-1.5 py-0.5 rounded text-[10px] transition-all opacity-70 hover:!opacity-100'
+    : 'flex items-center gap-1 px-1.5 py-1 rounded text-xs transition-all opacity-70 hover:!opacity-100';
+  const iconClass = inSlot ? 'w-2.5 h-2.5' : 'w-3 h-3';
+  const popOutButton = (
+    <button
+      onClick={async () => {
+        try {
+          const result = await api.sessions.popOut(sessionId);
+          if (result.ok) onPopOut?.();
+        } catch { /* ignore */ }
+      }}
+      className={btnClass}
+      style={{ background: 'var(--accent)', color: 'white' }}
+      title="Pop out to system terminal"
+    >
+      <TerminalSquare className={iconClass} />
+    </button>
+  );
+  const tools = (
+    <>
         {connected && !suspended && (
           <>
             <button
@@ -888,11 +915,11 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
                   }
                 }
               }}
-              className="flex items-center gap-1 px-1.5 py-1 rounded text-xs transition-all opacity-70 hover:!opacity-100"
+              className={btnClass}
               style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
               title="Zoom out"
             >
-              <ZoomOut className="w-3 h-3" />
+              <ZoomOut className={iconClass} />
             </button>
             <button
               onClick={() => {
@@ -913,33 +940,24 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
                   }
                 }
               }}
-              className="flex items-center gap-1 px-1.5 py-1 rounded text-xs transition-all opacity-70 hover:!opacity-100"
+              className={btnClass}
               style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
               title="Zoom in"
             >
-              <ZoomIn className="w-3 h-3" />
-            </button>
-            <button
-              onClick={async () => {
-                try {
-                  const result = await api.sessions.popOut(sessionId);
-                  if (result.ok) onPopOut?.();
-                } catch { /* ignore */ }
-              }}
-              className="flex items-center gap-1 px-1.5 py-1 rounded text-xs transition-all opacity-70 hover:!opacity-100"
-              style={{ background: 'var(--accent)', color: 'white' }}
-              title="Pop out to system terminal"
-            >
-              <ExternalLink className="w-3 h-3" />
+              <ZoomIn className={iconClass} />
             </button>
             <button
               onClick={hardRefresh}
-              className="flex items-center gap-1 px-1.5 py-1 rounded text-xs transition-all opacity-70 hover:!opacity-100"
-              style={{ background: 'var(--accent)', color: 'white' }}
+              className={btnClass}
+              style={{ background: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border)' }}
               title="Refresh terminal display"
             >
-              <RotateCcw className="w-3 h-3" />
+              <RotateCcw className={iconClass} />
             </button>
+            {/* Pop out joins the host's "open elsewhere" group when it has one */}
+            {popOutSlot !== undefined
+              ? popOutSlot && createPortal(popOutButton, popOutSlot)
+              : <><span className="w-px h-4 mx-0.5" style={{ background: 'var(--border)' }} />{popOutButton}</>}
           </>
         )}
         {!connected && !suspended && (
@@ -956,7 +974,16 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
             </div>
           </>
         )}
-      </div>
+    </>
+  );
+
+  return (
+    <div className="h-full relative group/terminal flex flex-col" onClick={() => termRef.current?.focus()}>
+      {inSlot ? (toolbarSlot ? createPortal(tools, toolbarSlot) : null) : (
+        <div className="h-7 shrink-0 flex items-center justify-end gap-2 px-3" style={{ background: '#0f1117' }}>
+          {tools}
+        </div>
+      )}
       <div
         ref={containerRef}
         className={`flex-1 min-h-0 w-full overflow-hidden${hideCursor ? ' hide-xterm-cursor' : ''}`}

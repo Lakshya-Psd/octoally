@@ -230,6 +230,18 @@ export function ProjectView({ projectId, projectPath, projectName: _projectName,
   );
   const [showAllTerminals, setShowAllTerminals] = useState(false);
   const [expandedTerminalId, setExpandedTerminalId] = useState<string | null>(null);
+  // Spots the terminals draw their buttons into: the tab bar for the single view,
+  // each grid card's header (by terminal id). One stable ref callback per key.
+  const [toolSlots, setToolSlots] = useState<Record<string, HTMLElement | null>>({});
+  const slotRefs = useRef(new Map<string, (el: HTMLElement | null) => void>());
+  const slotRef = (key: string) => {
+    let fn = slotRefs.current.get(key);
+    if (!fn) {
+      fn = (el) => setToolSlots((prev) => (prev[key] === el ? prev : { ...prev, [key]: el }));
+      slotRefs.current.set(key, fn);
+    }
+    return fn;
+  };
   const [gridFocusedId, setGridFocusedId] = useState<string | null>(null);
   const [gridColumns, setGridColumns] = useState(() => {
     const saved = localStorage.getItem(`octoally-project-grid-cols-${projectId}`);
@@ -1293,6 +1305,7 @@ export function ProjectView({ projectId, projectPath, projectName: _projectName,
                 </button>
               </>
             )}
+            {activeMode === 'terminal' && <span ref={slotRef('tabbar')} className="ml-auto flex items-center gap-1 shrink-0 pr-1" />}
           </div>
         )}
 
@@ -1541,6 +1554,7 @@ export function ProjectView({ projectId, projectPath, projectName: _projectName,
                           <span className={`truncate min-w-0 ml-auto ${isExpanded ? 'text-xs ml-2' : 'text-[10px]'}`} style={{ color: 'var(--text-secondary)' }}>
                             {projectSessions.find((s) => s.id === term.id)?.task || 'Terminal'}
                           </span>
+                          <span ref={slotRef(term.id)} className="flex items-center gap-1 shrink-0" />
                           {isExpanded ? (
                             <div className="flex items-center gap-2 ml-auto">
                               <button
@@ -1603,6 +1617,7 @@ export function ProjectView({ projectId, projectPath, projectName: _projectName,
                               cliType={sessionLookup.get(term.id)?.cli_type as 'claude' | 'codex' | undefined}
                               onReconnect={() => reconnectTerminal(term.id)}
                               onPopOut={() => closeTerminalTab(term.id)}
+                              toolbarSlot={gridMode ? toolSlots[term.id] ?? null : isSingleActive ? toolSlots.tabbar ?? null : null}
                               projectPath={projectPath}
                               onOpenFile={handleOpenInExplorer}
                             />

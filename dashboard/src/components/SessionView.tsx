@@ -100,6 +100,8 @@ export function SessionView({ sessionId, projectPath, projectId: _projectId, onE
   );
 
   // Terminal instances — first one is the parent session; restore extras
+  // The tab bar spot the active terminal draws its buttons into.
+  const [toolSlot, setToolSlot] = useState<HTMLElement | null>(null);
   const [terminalInstances, setTerminalInstances] = useState<TerminalInstance[]>(() => {
     if (initialized?.terminalInstances?.length) {
       // Deduplicate by id (stale localStorage may have accumulated dupes)
@@ -405,6 +407,7 @@ export function SessionView({ sessionId, projectPath, projectId: _projectId, onE
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
+            {activeMode === 'terminal' && <span ref={setToolSlot} className="ml-auto flex items-center gap-1 shrink-0 pr-1" />}
           </div>
         )}
 
@@ -425,6 +428,7 @@ export function SessionView({ sessionId, projectPath, projectId: _projectId, onE
                 hideCursor
                 onExit={term.id === sessionId && onExit ? () => onExit() : undefined}
                 onReconnect={() => reconnectTerminal(term.id)}
+                toolbarSlot={activeMode === 'terminal' && activeTerminalId === term.id ? toolSlot : null}
                 projectPath={projectPath}
                 onOpenFile={handleOpenInExplorer}
               />

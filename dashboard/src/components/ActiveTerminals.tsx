@@ -32,6 +32,18 @@ const MINIMIZED_KEY = 'octoally-active-terminals-minimized';
 export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenSessionIds }: ActiveTerminalsProps) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState<ExpandedSession | null>(null);
+  // Title-bar spots the terminals draw their buttons into (keyed by session, and
+  // 'expanded' for the modal); one stable ref callback per key avoids re-render loops.
+  const [toolSlots, setToolSlots] = useState<Record<string, HTMLElement | null>>({});
+  const slotRefs = useRef(new Map<string, (el: HTMLElement | null) => void>());
+  const slotRef = (key: string) => {
+    let fn = slotRefs.current.get(key);
+    if (!fn) {
+      fn = (el) => setToolSlots((prev) => (prev[key] === el ? prev : { ...prev, [key]: el }));
+      slotRefs.current.set(key, fn);
+    }
+    return fn;
+  };
   const [jumpOpen, setJumpOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [colsOpen, setColsOpen] = useState(false);
@@ -612,14 +624,9 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
                       background: session.status === 'running' ? 'var(--success)' : 'var(--warning)',
                     }}
                   />
-                  <button
-                    onClick={() => minimize(session.id)}
-                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors hover:opacity-100 opacity-70"
-                    style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
-                    title="Minimize to tray (keeps session alive)"
-                  >
-                    <Minus className="w-2.5 h-2.5" />
-                  </button>
+                  {/* How it looks │ where to open it │ the session itself */}
+                  <span ref={slotRef(session.id)} className="flex items-center gap-1 shrink-0" />
+                  <span className="w-px h-3.5 shrink-0" style={{ background: 'var(--border)' }} />
                   <button
                     onClick={() => {
                       setFocusedSessionId(session.id);
@@ -641,6 +648,16 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
                       <ExternalLink className="w-2.5 h-2.5" />
                     </button>
                   )}
+                  <span ref={slotRef(session.id + ':pop')} className="flex items-center shrink-0" />
+                  <span className="w-px h-3.5 shrink-0" style={{ background: 'var(--border)' }} />
+                  <button
+                    onClick={() => minimize(session.id)}
+                    className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors hover:opacity-100 opacity-70"
+                    style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border)' }}
+                    title="Minimize to tray (keeps session alive)"
+                  >
+                    <Minus className="w-2.5 h-2.5" />
+                  </button>
                   <button
                     onClick={() => {
                       api.sessions.kill(session.id)
@@ -671,7 +688,7 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
                       }
                     }}
                   />
-                  <Terminal sessionId={session.id} visible={!expanded} passiveResize={!!expanded || session.task === 'Terminal' || (session as any).cli_type === 'codex'} hideCursor={session.task !== 'Terminal'} cliType={(session as any).cli_type as 'claude' | 'codex' | undefined} onPopOut={() => queryClient.invalidateQueries({ queryKey: ['sessions'] })} />
+                  <Terminal sessionId={session.id} visible={!expanded} passiveResize={!!expanded || session.task === 'Terminal' || (session as any).cli_type === 'codex'} hideCursor={session.task !== 'Terminal'} cliType={(session as any).cli_type as 'claude' | 'codex' | undefined} onPopOut={() => queryClient.invalidateQueries({ queryKey: ['sessions'] })} toolbarSlot={toolSlots[session.id] ?? null} popOutSlot={toolSlots[session.id + ':pop'] ?? null} />
                 </div>
               </div>
               );
@@ -734,6 +751,7 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
                 {expanded.session.task || 'Terminal'}
               </span>
               <div className="flex items-center gap-2 ml-auto shrink-0">
+                <span ref={slotRef('expanded')} className="flex items-center gap-1 shrink-0" />
                 {expanded.projectId && (
                   <button
                     onClick={() => {
@@ -765,7 +783,7 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
             </div>
             {/* Full interactive terminal */}
             <div className="flex-1 min-h-0">
-              <Terminal sessionId={expanded.session.id} visible={true} hideCursor={expanded.session.task !== 'Terminal'} cliType={(expanded.session as any).cli_type as 'claude' | 'codex' | undefined} onPopOut={() => { setExpanded(null); queryClient.invalidateQueries({ queryKey: ['sessions'] }); }} />
+              <Terminal sessionId={expanded.session.id} visible={true} hideCursor={expanded.session.task !== 'Terminal'} cliType={(expanded.session as any).cli_type as 'claude' | 'codex' | undefined} onPopOut={() => { setExpanded(null); queryClient.invalidateQueries({ queryKey: ['sessions'] }); }} toolbarSlot={toolSlots.expanded ?? null} />
             </div>
           </div>
         </div>
