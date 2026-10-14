@@ -5,6 +5,7 @@ import type { Session, Project } from '../lib/api';
 import { Terminal } from './Terminal';
 import { Monitor, ArrowLeft, ExternalLink, Minimize2, Maximize2, ChevronDown, X, Columns3, Rows3, Zap, Bot, TerminalSquare, Minus } from 'lucide-react';
 import { ClaudeIcon, CodexIcon } from './CliIcons';
+import { useShortcut } from '../lib/shortcuts';
 
 interface ActiveTerminalsProps {
   onBack: () => void;
@@ -296,6 +297,30 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
       }, 400);
     }
   }, []);
+
+  // Alt+Shift+Arrows move the green focus around the grid. The shortcut
+  // dispatcher swallows the keypress, so the session never sees it.
+  const moveFocus = (dx: number, dy: number) => {
+    if (expanded || cards.length === 0) return;
+    const ids = cards.map((c) => c.session.id);
+    const cur = focusedSessionId ? ids.indexOf(focusedSessionId) : -1;
+    let next: number;
+    if (cur === -1) next = 0;
+    else if (dx) next = (cur + dx + ids.length) % ids.length; // left/right wrap around
+    else {
+      next = cur + dy * columns; // up/down stop at the first and last row
+      if (next < 0 || next >= ids.length) return;
+    }
+    const id = ids[next];
+    setFocusedSessionId(id);
+    const card = cardRefs.current.get(id);
+    card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    (card?.querySelector('.xterm-helper-textarea') as HTMLTextAreaElement | null)?.focus({ preventScroll: true });
+  };
+  useShortcut('terminal.nextTab', () => moveFocus(1, 0));
+  useShortcut('terminal.prevTab', () => moveFocus(-1, 0));
+  useShortcut('grid.focusDown', () => moveFocus(0, 1));
+  useShortcut('grid.focusUp', () => moveFocus(0, -1));
 
   return (
     <div className="h-full flex flex-col" style={{ background: 'var(--bg-primary)' }}>

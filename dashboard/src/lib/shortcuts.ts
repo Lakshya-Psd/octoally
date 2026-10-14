@@ -69,7 +69,7 @@ export const ACTIONS: readonly ActionDef[] = [
   {
     id: 'terminal.nextTab',
     name: 'Next Terminal Tab',
-    description: 'Cycle to the next terminal/agent tab in the current project',
+    description: 'Cycle to the next terminal/agent tab in the current project (on Active Sessions: focus the session to the right)',
     category: 'Navigation',
     // Punctuation shortcuts (Ctrl+Shift+.) are a trap: Shift+. produces `>` on
     // US layouts, so e.key is `>`, not `.`, and the combo never matches.
@@ -81,9 +81,25 @@ export const ACTIONS: readonly ActionDef[] = [
   {
     id: 'terminal.prevTab',
     name: 'Previous Terminal Tab',
-    description: 'Cycle to the previous terminal/agent tab in the current project',
+    description: 'Cycle to the previous terminal/agent tab in the current project (on Active Sessions: focus the session to the left)',
     category: 'Navigation',
     defaultCombo: 'alt+shift+arrowleft',
+    fireInEditableByDefault: true,
+  },
+  {
+    id: 'grid.focusUp',
+    name: 'Session Above',
+    description: 'On Active Sessions, focus the session one row up',
+    category: 'Navigation',
+    defaultCombo: 'alt+shift+arrowup',
+    fireInEditableByDefault: true,
+  },
+  {
+    id: 'grid.focusDown',
+    name: 'Session Below',
+    description: 'On Active Sessions, focus the session one row down',
+    category: 'Navigation',
+    defaultCombo: 'alt+shift+arrowdown',
     fireInEditableByDefault: true,
   },
   {
