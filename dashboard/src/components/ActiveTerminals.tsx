@@ -28,6 +28,8 @@ interface ExpandedSession {
 const COLUMNS_KEY = 'octoally-active-terminals-cols';
 const ROWS_KEY = 'octoally-active-terminals-rows';
 const MINIMIZED_KEY = 'octoally-active-terminals-minimized';
+/** The grid order the user dragged sessions into (session ids); others follow, A–Z. */
+const ORDER_KEY = 'octoally-active-terminals-order';
 
 export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenSessionIds }: ActiveTerminalsProps) {
   const queryClient = useQueryClient();
@@ -58,6 +60,20 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
     if (!saved || saved === 'auto') return 'auto';
     return Math.min(6, Math.max(1, parseInt(saved, 10) || 2));
   });
+  const [order, setOrder] = useState<string[]>(() => {
+    try {
+      const arr = JSON.parse(localStorage.getItem(ORDER_KEY) || '[]');
+      return Array.isArray(arr) ? (arr as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  useEffect(() => {
+    localStorage.setItem(ORDER_KEY, JSON.stringify(order));
+  }, [order]);
+  // Dragging a card by its title bar: which card, and where it would land.
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropAt, setDropAt] = useState<{ id: string; after: boolean } | null>(null);
   const [minimizedSessionIds, setMinimizedSessionIds] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem(MINIMIZED_KEY);
@@ -197,6 +213,24 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
     }
   }
   allCards.sort((a, b) => a.groupLabel.localeCompare(b.groupLabel));
+  // Then the order the user dragged them into; sessions not placed yet keep A–Z, at the end.
+  const rank = (id: string) => {
+    const i = order.indexOf(id);
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  allCards.sort((a, b) => rank(a.session.id) - rank(b.session.id));
+
+  const dropCard = (targetId: string, after: boolean) => {
+    const moving = dragId;
+    setDragId(null);
+    setDropAt(null);
+    if (!moving || moving === targetId) return;
+    const ids = allCards.map((c) => c.session.id).filter((id) => id !== moving);
+    const at = ids.indexOf(targetId);
+    if (at === -1) return;
+    ids.splice(after ? at + 1 : at, 0, moving);
+    setOrder(ids);
+  };
 
   // Split into visible cards (rendered in grid) and minimized cards (rendered in tray).
   // Minimized cards keep their server-side PTY alive — we just unmount the Terminal,
@@ -580,11 +614,37 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
                   borderColor: isFocused ? '#22c55e' : 'var(--border)',
                   background: 'var(--bg-secondary)',
                   height: `${cardHeight + (mounted ? 1 : 0)}px`,
+                  opacity: dragId === session.id ? 0.5 : 1,
+                  // Where the dragged card will land: a bar on this card's left or right edge
+                  boxShadow: dropAt?.id === session.id ? `${dropAt.after ? '' : '-'}4px 0 0 0 var(--accent)` : undefined,
+                }}
+                onDragOver={(e) => {
+                  if (!dragId || dragId === session.id) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'move';
+                  const r = e.currentTarget.getBoundingClientRect();
+                  const after = e.clientX > r.left + r.width / 2;
+                  if (dropAt?.id !== session.id || dropAt.after !== after) setDropAt({ id: session.id, after });
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  dropCard(session.id, dropAt?.id === session.id ? dropAt.after : false);
                 }}
               >
-                {/* Card header */}
+                {/* Card header — drag it to move the card */}
                 <div
-                  className="flex items-center gap-1.5 px-2 h-[34px] border-b rounded-t-lg transition-colors duration-200 overflow-hidden"
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', session.id);
+                    setDragId(session.id);
+                  }}
+                  onDragEnd={() => {
+                    setDragId(null);
+                    setDropAt(null);
+                  }}
+                  title="Drag to reorder"
+                  className="flex items-center gap-1.5 px-2 h-[34px] border-b rounded-t-lg transition-colors duration-200 overflow-hidden cursor-grab active:cursor-grabbing"
                   style={{
                     borderColor: isFocused ? '#22c55e' : 'var(--border)',
                     background: isFocused ? '#22c55e30' : 'var(--bg-tertiary)',
