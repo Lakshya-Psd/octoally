@@ -74,6 +74,24 @@ function Dashboard() {
       return true;
     });
   });
+  // Dragging a project tab to reorder: which tab, and where it would land.
+  const [dragTabId, setDragTabId] = useState<string | null>(null);
+  const [tabDropAt, setTabDropAt] = useState<{ id: string; after: boolean } | null>(null);
+  const dropTab = (targetId: string, after: boolean) => {
+    const moving = dragTabId;
+    setDragTabId(null);
+    setTabDropAt(null);
+    if (!moving || moving === targetId) return;
+    setProjectTabs((prev) => {
+      const tab = prev.find((t) => t.projectId === moving);
+      if (!tab) return prev;
+      const rest = prev.filter((t) => t.projectId !== moving);
+      const at = rest.findIndex((t) => t.projectId === targetId);
+      if (at === -1) return prev;
+      rest.splice(after ? at + 1 : at, 0, tab);
+      return rest;
+    });
+  };
 
   // Apply saved app font size on load
   const { data: appSettings } = useQuery({
@@ -613,8 +631,36 @@ function Dashboard() {
           return (
             <div
               key={tab.projectId}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', tab.projectId);
+                setDragTabId(tab.projectId);
+              }}
+              onDragEnd={() => {
+                setDragTabId(null);
+                setTabDropAt(null);
+              }}
+              onDragOver={(e) => {
+                if (!dragTabId || dragTabId === tab.projectId) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                const r = e.currentTarget.getBoundingClientRect();
+                const after = e.clientX > r.left + r.width / 2;
+                if (tabDropAt?.id !== tab.projectId || tabDropAt.after !== after) setTabDropAt({ id: tab.projectId, after });
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                dropTab(tab.projectId, tabDropAt?.id === tab.projectId ? tabDropAt.after : false);
+              }}
+              title="Drag to reorder"
               className="flex items-center gap-1 rounded-md shrink-0 group"
-              style={{ background: isActive ? 'var(--bg-tertiary)' : 'transparent' }}
+              style={{
+                background: isActive ? 'var(--bg-tertiary)' : 'transparent',
+                opacity: dragTabId === tab.projectId ? 0.5 : 1,
+                // Where the dragged tab will land: a bar on this tab's left or right edge
+                boxShadow: tabDropAt?.id === tab.projectId ? `${tabDropAt.after ? '' : '-'}2px 0 0 0 var(--accent)` : undefined,
+              }}
             >
               <button
                 onClick={() => { setActiveTab(tabId); dismissActiveTerminals(); }}
@@ -672,10 +718,11 @@ function Dashboard() {
             onSelectedProjectChange={(id) => { homeSelectedProjectIdRef.current = id; }}
           />
         </div>
-        {projectTabs.map((tab) => {
+        {/* Fixed order, not tab order: reordering tabs must not move live terminals around the page */}
+        {[...projectTabs].sort((a, b) => a.projectId.localeCompare(b.projectId)).map((tab) => {
           const tabId = `project-${tab.projectId}`;
           const isActive = activeTab === tabId;
-          const project = projects.find((p) => p.id === tab.projectId);
+          const project =projects.find((p) => p.id === tab.projectId);
           const projectPath = project?.path || '';
           const projectName = tab?.projectName || project?.name || 'Project';
 
