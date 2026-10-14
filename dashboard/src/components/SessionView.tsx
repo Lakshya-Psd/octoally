@@ -186,8 +186,11 @@ export function SessionView({ sessionId, projectPath, projectId: _projectId, onE
     try {
       // First try to reconnect to an existing tmux session
       const { session: oldSession } = await api.sessions.get(oldId).catch(() => ({ session: null }));
-      if (oldSession?.status === 'detached') {
-        await api.sessions.reconnect(oldId);
+      if (oldSession?.status === 'detached' || oldSession?.status === 'released') {
+        // A popped-out session is still running (in its own window or in the
+        // background): bring it back instead of starting a new chat.
+        if (oldSession.status === 'released') await api.sessions.adopt(`tmux:of-${oldId}`, oldSession.project_id ?? undefined);
+        else await api.sessions.reconnect(oldId);
         // Force re-mount of the Terminal component by cycling the ID
         setTerminalInstances((prev) =>
           prev.map((t) => (t.id === oldId ? { ...t, id: oldId + '_reconnecting' } : t))

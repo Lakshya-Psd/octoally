@@ -16,6 +16,9 @@ const HOST_EXACT = new Set([
   'CLAUDE_EFFORT',
   'MCP_CONNECTION_NONBLOCKING',
   'MCP_SERVER_CONNECTION_BATCH_SIZE',
+  // Claude Code sets this for its tool shells; inherited, every session OctoAlly
+  // launches afterwards draws without colour.
+  'NO_COLOR',
 ]);
 const HOST_PREFIXES = ['CLAUDE_AGENT_SDK_', 'CLAUDE_PREVIEW_'];
 /** CLAUDE_CODE_* variables that are user configuration, not host session state. */

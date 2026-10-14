@@ -862,8 +862,10 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
   }, [sessionId]);
 
   return (
-    <div className="h-full relative group/terminal" onClick={() => termRef.current?.focus()}>
-      <div className="absolute top-2 right-5 z-10 flex items-center gap-2">
+    <div className="h-full relative group/terminal flex flex-col" onClick={() => termRef.current?.focus()}>
+      {/* The buttons get a strip of their own: floating over the terminal they
+          covered its top-right corner, where Claude draws a panel's close button. */}
+      <div className="h-7 shrink-0 flex items-center justify-end gap-2 px-3" style={{ background: '#0f1117' }}>
         {connected && !suspended && (
           <>
             <button
@@ -957,7 +959,7 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       </div>
       <div
         ref={containerRef}
-        className={`h-full w-full overflow-hidden${hideCursor ? ' hide-xterm-cursor' : ''}`}
+        className={`flex-1 min-h-0 w-full overflow-hidden${hideCursor ? ' hide-xterm-cursor' : ''}`}
         style={{
           padding: '4px',
           background: '#0f1117',

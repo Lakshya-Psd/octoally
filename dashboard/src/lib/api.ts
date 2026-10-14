@@ -292,7 +292,7 @@ export interface Session {
   id: string;
   project_id: string | null;
   task: string;
-  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'detached';
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'detached' | 'released';
   pid: number | null;
   started_at: string | null;
   completed_at: string | null;

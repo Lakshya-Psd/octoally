@@ -33,6 +33,9 @@ const env = {
   HOME: home,
   DB_PATH: join(home, 'octoally.db'),
   OCTOALLY_SHELL: 'powershell',
+  // As when the server is started from a Claude Code tool shell.
+  CLAUDECODE: '1',
+  NO_COLOR: '1',
   Path: `${process.env.Path || process.env.PATH};${realHome}\\.local\\bin`,
 };
 
@@ -137,6 +140,8 @@ try {
   t.type('echo ("winmux-" + "e2e")\r');
   check('terminal output streams', await t.waitFor('winmux-e2e'));
   check('terminal cwd is project', strip(t.out).includes(project.path.replace(/\//g, '\\')), project.path);
+  t.type('echo ("nocolor=[" + $env:NO_COLOR + "]")\r');
+  check("sessions don't inherit the host's NO_COLOR", await t.waitFor('nocolor=[]'));
   t.ws.close();
   check('winmux has session', mux('ls').includes(`of-${id}`));
 
