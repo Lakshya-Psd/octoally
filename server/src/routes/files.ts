@@ -77,6 +77,8 @@ async function prunePastes(dir: string): Promise<void> {
 export const fileRoutes: FastifyPluginAsync = async (app) => {
   // Raw image bodies, for /files/paste-image only (this plugin's scope).
   app.addContentTypeParser(/^image\//, { parseAs: 'buffer', bodyLimit: 25 * 1024 * 1024 }, (_req, body, done) => done(null, body));
+  // Raw file bodies, for /files/paste-file only.
+  app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: 200 * 1024 * 1024 }, (_req, body, done) => done(null, body));
 
   // File metadata (used by the viewer to auto-refresh previews and by terminal file links)
   app.get<{
@@ -112,6 +114,25 @@ export const fileRoutes: FastifyPluginAsync = async (app) => {
     await mkdir(dir, { recursive: true });
     const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
     const path = join(dir, `paste-${stamp}-${Math.random().toString(36).slice(2, 6)}.${ext}`);
+    await writeFile(path, body);
+    void prunePastes(dir);
+    return { ok: true, path: process.platform === 'win32' ? win32.normalize(path) : path, size: body.length };
+  });
+
+  // Save a file of any type dropped or pasted into a terminal when the client
+  // can't see its real path (a plain browser hides it). Keeps the file's name
+  // so the CLI can tell what it is.
+  app.post<{ Querystring: { name?: string } }>('/files/paste-file', async (req, reply) => {
+    const body = req.body;
+    if (!Buffer.isBuffer(body)) {
+      return reply.status(400).send({ error: 'Send the file as an application/octet-stream body' });
+    }
+    // Only the base name, without characters Windows forbids in file names
+    const name = basename(String(req.query.name || 'file')).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').slice(-120) || 'file';
+    const dir = PASTE_DIR();
+    await mkdir(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+    const path = join(dir, `paste-${stamp}-${Math.random().toString(36).slice(2, 6)}-${name}`);
     await writeFile(path, body);
     void prunePastes(dir);
     return { ok: true, path: process.platform === 'win32' ? win32.normalize(path) : path, size: body.length };

@@ -249,10 +249,31 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
     };
     // A pasted image (e.g. a screenshot) is saved by the server and its path
     // pasted instead — Claude Code attaches an image given by path.
+    const quotePath = (p: string) => (/\s/.test(p) ? `"${p}"` : p);
     const sendImage = (image: Blob): void => {
       api.files.pasteImage(image)
-        .then(({ path }) => { sendPaste(/\s/.test(path) ? `"${path}" ` : `${path} `); })
+        .then(({ path }) => { sendPaste(`${quotePath(path)} `); })
         .catch((err) => console.error('[Terminal] image paste failed:', err));
+    };
+    // Files dropped or pasted from disk, any type: the desktop app knows their
+    // real path and pastes that (folders too). A plain browser hides the path,
+    // so a copy is saved by the server and the copy's path pasted instead.
+    const diskPath = (f: File): string => {
+      try {
+        return (window as any).electronAPI?.getPathForFile?.(f) || '';
+      } catch {
+        return '';
+      }
+    };
+    const sendFiles = async (files: File[]) => {
+      const paths: string[] = [];
+      for (const f of files) {
+        const p = diskPath(f) || await api.files.pasteFile(f)
+          .then((r) => r.path)
+          .catch((err) => { console.error('[Terminal] file paste failed:', f.name, err); return ''; });
+        if (p) paths.push(quotePath(p));
+      }
+      if (paths.length) sendPaste(paths.join(' ') + ' ');
     };
     // The clipboard's image, but only when it holds no text: apps like Excel
     // put both on the clipboard, and then the text is what's meant.
@@ -336,9 +357,24 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
     const pasteTarget = xtermTextarea || containerRef.current;
     const pasteHandler = (ev: Event) => {
       const ce = ev as ClipboardEvent;
+      const files = Array.from(ce.clipboardData?.files ?? []);
+      // Files copied in File Explorer: paste where they are
+      if (files.length > 0 && files.every((f) => diskPath(f))) {
+        void sendFiles(files);
+        ce.preventDefault();
+        ce.stopImmediatePropagation();
+        return;
+      }
       const image = imageFromTransfer(ce.clipboardData);
       if (image) {
         sendImage(image);
+        ce.preventDefault();
+        ce.stopImmediatePropagation();
+        return;
+      }
+      // Other files with no text alongside (a plain browser can't see their path)
+      if (files.length > 0 && !ce.clipboardData?.getData('text')) {
+        void sendFiles(files);
         ce.preventDefault();
         ce.stopImmediatePropagation();
         return;
@@ -349,6 +385,24 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       }
     };
     pasteTarget.addEventListener('paste', pasteHandler, { capture: true });
+
+    // Files dragged in from File Explorer (or the desktop) are pasted as paths
+    const dropTarget = containerRef.current;
+    const dragOverHandler = (ev: DragEvent) => {
+      if (!ev.dataTransfer?.types.includes('Files')) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = 'copy';
+    };
+    const dropHandler = (ev: DragEvent) => {
+      const files = Array.from(ev.dataTransfer?.files ?? []);
+      if (files.length === 0) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      void sendFiles(files);
+      term.focus();
+    };
+    dropTarget.addEventListener('dragover', dragOverHandler);
+    dropTarget.addEventListener('drop', dropHandler);
 
     // Windows: right-click copies the selection if there is one, otherwise
     // pastes (Windows Terminal behaviour). The browser menu is suppressed only
@@ -637,6 +691,8 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver.disconnect();
       pasteTarget.removeEventListener('paste', pasteHandler, { capture: true } as EventListenerOptions);
+      dropTarget.removeEventListener('dragover', dragOverHandler);
+      dropTarget.removeEventListener('drop', dropHandler);
       if (isWindowsClient) contextTarget.removeEventListener('contextmenu', contextMenuHandler, { capture: true } as EventListenerOptions);
       wsRef.current?.close();
       term.dispose();

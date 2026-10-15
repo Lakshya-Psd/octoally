@@ -114,6 +114,7 @@ Pages, SVG, Markdown and CSV files have a **Preview / Code** switch.
 - **Clickable paths.** When Claude mentions a file in a session (e.g. `C:\...\demo.mp4` or `src/App.tsx`), click it to open the preview.
 - **Safety.** Previewed web pages run on a separate local address, so they can't control OctoAlly.
 - **Paste images.** Paste a screenshot into a session (Ctrl+V, Ctrl+Shift+V or right-click). It's saved in `%USERPROFILE%\.octoally\pastes` and its path is typed in, so Claude gets the image. Pasted images are deleted after 7 days.
+- **Drop or paste files.** Drag files of any type (or folders) from File Explorer onto a session, or copy them in File Explorer and press Ctrl+V. Their paths are typed in. In the desktop app these are the files' real paths. A browser can't see where a file lives, so it uploads a copy to `%USERPROFILE%\.octoally\pastes` (up to 200 MB, no folders) and types the copy's path.
 
 ## Desktop app
 

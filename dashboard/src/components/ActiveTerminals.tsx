@@ -761,6 +761,15 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
                   <div
                     className="absolute inset-0 z-[5]"
                     style={{ pointerEvents: isFocused ? 'none' : 'auto' }}
+                    // A file dragged over an unfocused card focuses it, so the
+                    // terminal underneath can take the drop
+                    onDragEnter={(e) => {
+                      if (!isFocused && e.dataTransfer.types.includes('Files')) setFocusedSessionId(session.id);
+                    }}
+                    onDragOver={(e) => {
+                      if (e.dataTransfer.types.includes('Files')) e.preventDefault();
+                    }}
+                    onDrop={(e) => e.preventDefault()}
                     onMouseDown={(e) => {
                       if (!isFocused) {
                         e.preventDefault();

@@ -117,6 +117,22 @@ function Dashboard() {
     return () => uninstall();
   }, []);
 
+  // A file dropped outside a terminal does nothing — by default the window
+  // would navigate to it (the desktop app then opens it in another program).
+  useEffect(() => {
+    const guard = (e: DragEvent) => {
+      if (e.defaultPrevented || !e.dataTransfer?.types.includes('Files')) return;
+      e.preventDefault();
+      if (e.type === 'dragover') e.dataTransfer.dropEffect = 'none';
+    };
+    window.addEventListener('dragover', guard);
+    window.addEventListener('drop', guard);
+    return () => {
+      window.removeEventListener('dragover', guard);
+      window.removeEventListener('drop', guard);
+    };
+  }, []);
+
   // Track hidden session IDs reported by each ProjectView
   const hiddenSessionIdsRef = useRef<Map<string, string[]>>(new Map());
   const [hiddenSessionIds, setHiddenSessionIds] = useState<string[]>([]);

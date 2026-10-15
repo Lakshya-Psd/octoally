@@ -133,6 +133,13 @@ export const api = {
         headers: { 'Content-Type': image.type },
         body: image,
       }),
+    /** Save a copy of a dropped/pasted file of any type; returns where it was saved. */
+    pasteFile: (file: File) =>
+      fetchJSON<{ ok: boolean; path: string; size: number }>(`/files/paste-file?name=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: file,
+      }),
     /** Open with the OS default app, or (reveal) show it selected in the file manager. */
     openExternal: (path: string, reveal = false) =>
       fetchJSON<{ ok: boolean }>('/files/open', {
