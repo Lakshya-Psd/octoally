@@ -46,3 +46,7 @@ AGENTS.md
 /.octoally
 /.octoally.pid
 /logs/
+
+# Understand-Anything scratch
+.ua/.trash-*/
+.ua/tmp/

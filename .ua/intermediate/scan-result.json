@@ -1,0 +1,1294 @@
+{
+  "name": "octoally",
+  "description": "AI coding session orchestration dashboard that launches, monitors, and manages Claude Code and OpenAI Codex sessions from a local web UI. This fork adds a native Windows port (winmux, a tmux replacement built on ConPTY). Note: this project has over 100 source files; consider scoping analysis to a subdirectory for faster results.",
+  "languages": [
+    "batch",
+    "css",
+    "html",
+    "javascript",
+    "json",
+    "markdown",
+    "powershell",
+    "service",
+    "shell",
+    "typescript",
+    "vbs",
+    "xml",
+    "yaml"
+  ],
+  "frameworks": [
+    "Fastify",
+    "tRPC",
+    "React",
+    "Vite",
+    "Tailwind CSS",
+    "Zustand",
+    "TanStack Query",
+    "xterm.js",
+    "Electron",
+    "SQLite (better-sqlite3)",
+    "Zod",
+    "GitHub Actions"
+  ],
+  "files": [
+    {
+      "path": ".gitattributes",
+      "language": "unknown",
+      "sizeLines": 15,
+      "fileCategory": "code"
+    },
+    {
+      "path": ".github/workflows/desktop-build.yml",
+      "language": "yaml",
+      "sizeLines": 77,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/release.yml",
+      "language": "yaml",
+      "sizeLines": 131,
+      "fileCategory": "infra"
+    },
+    {
+      "path": ".github/workflows/test-macos-hooks.yml",
+      "language": "yaml",
+      "sizeLines": 145,
+      "fileCategory": "infra"
+    },
+    {
+      "path": "README.md",
+      "language": "markdown",
+      "sizeLines": 288,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "WINDOWS.md",
+      "language": "markdown",
+      "sizeLines": 176,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "bin/octoally",
+      "language": "unknown",
+      "sizeLines": 623,
+      "fileCategory": "code"
+    },
+    {
+      "path": "bin/octoally-hidden.vbs",
+      "language": "vbs",
+      "sizeLines": 48,
+      "fileCategory": "code"
+    },
+    {
+      "path": "bin/octoally-win.mjs",
+      "language": "javascript",
+      "sizeLines": 1051,
+      "fileCategory": "code"
+    },
+    {
+      "path": "bin/octoally.cmd",
+      "language": "batch",
+      "sizeLines": 13,
+      "fileCategory": "script"
+    },
+    {
+      "path": "cli.mjs",
+      "language": "javascript",
+      "sizeLines": 447,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/README.md",
+      "language": "markdown",
+      "sizeLines": 73,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "dashboard/eslint.config.js",
+      "language": "javascript",
+      "sizeLines": 23,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/index.html",
+      "language": "html",
+      "sizeLines": 13,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "dashboard/package.json",
+      "language": "json",
+      "sizeLines": 64,
+      "fileCategory": "config"
+    },
+    {
+      "path": "dashboard/src/App.tsx",
+      "language": "typescript",
+      "sizeLines": 818,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/ActiveEvents.tsx",
+      "language": "typescript",
+      "sizeLines": 206,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/ActiveTerminals.tsx",
+      "language": "typescript",
+      "sizeLines": 887,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/AgentGuide.tsx",
+      "language": "typescript",
+      "sizeLines": 584,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/CliIcons.tsx",
+      "language": "typescript",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/CloseAppModal.tsx",
+      "language": "typescript",
+      "sizeLines": 161,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/CloseTabModal.tsx",
+      "language": "typescript",
+      "sizeLines": 135,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/ConfirmModal.tsx",
+      "language": "typescript",
+      "sizeLines": 107,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/DesktopUpdateBanner.tsx",
+      "language": "typescript",
+      "sizeLines": 137,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/DiffComponents.tsx",
+      "language": "typescript",
+      "sizeLines": 613,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/EventStream.tsx",
+      "language": "typescript",
+      "sizeLines": 196,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/FileExplorer.tsx",
+      "language": "typescript",
+      "sizeLines": 2069,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/FilePreview.tsx",
+      "language": "typescript",
+      "sizeLines": 169,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/GitPanel.tsx",
+      "language": "typescript",
+      "sizeLines": 798,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/GlobalDictationButton.tsx",
+      "language": "typescript",
+      "sizeLines": 318,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/GlobalMicButton.tsx",
+      "language": "typescript",
+      "sizeLines": 216,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/HistoryViewer.tsx",
+      "language": "typescript",
+      "sizeLines": 135,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/MicSettingsModal.tsx",
+      "language": "typescript",
+      "sizeLines": 352,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/ModelDownloadModal.tsx",
+      "language": "typescript",
+      "sizeLines": 216,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/ModelSettingsModal.tsx",
+      "language": "typescript",
+      "sizeLines": 1205,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/NewTaskForm.tsx",
+      "language": "typescript",
+      "sizeLines": 783,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/ProjectDashboard.tsx",
+      "language": "typescript",
+      "sizeLines": 2036,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/ProjectView.tsx",
+      "language": "typescript",
+      "sizeLines": 1703,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/RufloDeprecationModal.tsx",
+      "language": "typescript",
+      "sizeLines": 239,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/SessionLauncher.tsx",
+      "language": "typescript",
+      "sizeLines": 560,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/SessionMicButton.tsx",
+      "language": "typescript",
+      "sizeLines": 126,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/SessionView.tsx",
+      "language": "typescript",
+      "sizeLines": 470,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/SettingsModal.tsx",
+      "language": "typescript",
+      "sizeLines": 874,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/StatuslinePromptModal.tsx",
+      "language": "typescript",
+      "sizeLines": 175,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/Terminal.tsx",
+      "language": "typescript",
+      "sizeLines": 1056,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/components/WebPageView.tsx",
+      "language": "typescript",
+      "sizeLines": 366,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/index.css",
+      "language": "css",
+      "sizeLines": 122,
+      "fileCategory": "markup"
+    },
+    {
+      "path": "dashboard/src/lib/api.ts",
+      "language": "typescript",
+      "sizeLines": 460,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/audio-cues.ts",
+      "language": "typescript",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/paths.ts",
+      "language": "typescript",
+      "sizeLines": 184,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/platform.ts",
+      "language": "typescript",
+      "sizeLines": 88,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/preview.ts",
+      "language": "typescript",
+      "sizeLines": 77,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/shortcuts.ts",
+      "language": "typescript",
+      "sizeLines": 510,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/speech.ts",
+      "language": "typescript",
+      "sizeLines": 662,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/tauri.ts",
+      "language": "typescript",
+      "sizeLines": 70,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/terminal-file-links.ts",
+      "language": "typescript",
+      "sizeLines": 108,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/trpc.ts",
+      "language": "typescript",
+      "sizeLines": 17,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/voice-commands.ts",
+      "language": "typescript",
+      "sizeLines": 32,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/lib/websocket.ts",
+      "language": "typescript",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/src/main.tsx",
+      "language": "typescript",
+      "sizeLines": 85,
+      "fileCategory": "code"
+    },
+    {
+      "path": "dashboard/tsconfig.app.json",
+      "language": "json",
+      "sizeLines": 28,
+      "fileCategory": "config"
+    },
+    {
+      "path": "dashboard/tsconfig.json",
+      "language": "json",
+      "sizeLines": 7,
+      "fileCategory": "config"
+    },
+    {
+      "path": "dashboard/tsconfig.node.json",
+      "language": "json",
+      "sizeLines": 26,
+      "fileCategory": "config"
+    },
+    {
+      "path": "dashboard/vite.config.ts",
+      "language": "typescript",
+      "sizeLines": 16,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/package.json",
+      "language": "json",
+      "sizeLines": 116,
+      "fileCategory": "config"
+    },
+    {
+      "path": "desktop-electron/scripts/build.mjs",
+      "language": "javascript",
+      "sizeLines": 24,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/crypto-store.ts",
+      "language": "typescript",
+      "sizeLines": 185,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/desktop-settings.ts",
+      "language": "typescript",
+      "sizeLines": 20,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/main.ts",
+      "language": "typescript",
+      "sizeLines": 518,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/preload.ts",
+      "language": "typescript",
+      "sizeLines": 21,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/server-manager.ts",
+      "language": "typescript",
+      "sizeLines": 553,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/speech/audio.ts",
+      "language": "typescript",
+      "sizeLines": 470,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/speech/cloud-whisper.ts",
+      "language": "typescript",
+      "sizeLines": 147,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/speech/command-classifier.ts",
+      "language": "typescript",
+      "sizeLines": 169,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/speech/commands.ts",
+      "language": "typescript",
+      "sizeLines": 452,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/speech/download.ts",
+      "language": "typescript",
+      "sizeLines": 123,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/speech/index.ts",
+      "language": "typescript",
+      "sizeLines": 1019,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/speech/vad.ts",
+      "language": "typescript",
+      "sizeLines": 154,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/speech/whisper.ts",
+      "language": "typescript",
+      "sizeLines": 458,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/src/tray.ts",
+      "language": "typescript",
+      "sizeLines": 227,
+      "fileCategory": "code"
+    },
+    {
+      "path": "desktop-electron/tsconfig.json",
+      "language": "json",
+      "sizeLines": 14,
+      "fileCategory": "config"
+    },
+    {
+      "path": "docs/TASKS.md",
+      "language": "markdown",
+      "sizeLines": 62,
+      "fileCategory": "docs"
+    },
+    {
+      "path": "install.cmd",
+      "language": "batch",
+      "sizeLines": 8,
+      "fileCategory": "script"
+    },
+    {
+      "path": "package.json",
+      "language": "json",
+      "sizeLines": 60,
+      "fileCategory": "config"
+    },
+    {
+      "path": "scripts/build-archive.sh",
+      "language": "shell",
+      "sizeLines": 78,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/deploy-dev.sh",
+      "language": "shell",
+      "sizeLines": 75,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/dev.sh",
+      "language": "shell",
+      "sizeLines": 99,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/install.ps1",
+      "language": "powershell",
+      "sizeLines": 439,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/install.sh",
+      "language": "shell",
+      "sizeLines": 1033,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/release.sh",
+      "language": "shell",
+      "sizeLines": 193,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/service/com.aigenius.octoally.plist",
+      "language": "xml",
+      "sizeLines": 43,
+      "fileCategory": "config"
+    },
+    {
+      "path": "scripts/service/octoally.service",
+      "language": "service",
+      "sizeLines": 24,
+      "fileCategory": "code"
+    },
+    {
+      "path": "scripts/uninstall.ps1",
+      "language": "powershell",
+      "sizeLines": 167,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/uninstall.sh",
+      "language": "shell",
+      "sizeLines": 286,
+      "fileCategory": "script"
+    },
+    {
+      "path": "scripts/update.sh",
+      "language": "shell",
+      "sizeLines": 160,
+      "fileCategory": "script"
+    },
+    {
+      "path": "server/package.json",
+      "language": "json",
+      "sizeLines": 41,
+      "fileCategory": "config"
+    },
+    {
+      "path": "server/scripts/copy-data.mjs",
+      "language": "javascript",
+      "sizeLines": 19,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/scripts/e2e-windows.mjs",
+      "language": "javascript",
+      "sizeLines": 242,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/scripts/start.mjs",
+      "language": "javascript",
+      "sizeLines": 8,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/config.ts",
+      "language": "typescript",
+      "sizeLines": 120,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/data/default-agents.ts",
+      "language": "typescript",
+      "sizeLines": 74,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/data/octoally-hook.cjs",
+      "language": "javascript",
+      "sizeLines": 69,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/data/statusline.cjs",
+      "language": "javascript",
+      "sizeLines": 127,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/data/statusline.sh",
+      "language": "shell",
+      "sizeLines": 156,
+      "fileCategory": "script"
+    },
+    {
+      "path": "server/src/db/index.ts",
+      "language": "typescript",
+      "sizeLines": 187,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/index.ts",
+      "language": "typescript",
+      "sizeLines": 472,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/lib/ansi.ts",
+      "language": "typescript",
+      "sizeLines": 17,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/lib/jsonl-reader.ts",
+      "language": "typescript",
+      "sizeLines": 86,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/lib/pty.ts",
+      "language": "typescript",
+      "sizeLines": 61,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/lib/virtual-terminal.ts",
+      "language": "typescript",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/agent.ts",
+      "language": "typescript",
+      "sizeLines": 511,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/events.ts",
+      "language": "typescript",
+      "sizeLines": 84,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/files.ts",
+      "language": "typescript",
+      "sizeLines": 490,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/git.ts",
+      "language": "typescript",
+      "sizeLines": 371,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/hooks.ts",
+      "language": "typescript",
+      "sizeLines": 186,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/projects.ts",
+      "language": "typescript",
+      "sizeLines": 740,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/sessions.ts",
+      "language": "typescript",
+      "sizeLines": 378,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/settings.ts",
+      "language": "typescript",
+      "sizeLines": 152,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/stream.ts",
+      "language": "typescript",
+      "sizeLines": 25,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/tasks.ts",
+      "language": "typescript",
+      "sizeLines": 67,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/routes/terminal.ts",
+      "language": "typescript",
+      "sizeLines": 192,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/services/event-store.ts",
+      "language": "typescript",
+      "sizeLines": 91,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/services/preview-server.ts",
+      "language": "typescript",
+      "sizeLines": 152,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/services/pty-worker.ts",
+      "language": "typescript",
+      "sizeLines": 955,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/services/session-manager.ts",
+      "language": "typescript",
+      "sizeLines": 2419,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/services/session-state.ts",
+      "language": "typescript",
+      "sizeLines": 522,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/trpc/index.ts",
+      "language": "typescript",
+      "sizeLines": 9,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/trpc/router.ts",
+      "language": "typescript",
+      "sizeLines": 102,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/utils/enrich-path.ts",
+      "language": "typescript",
+      "sizeLines": 126,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/utils/hide-windows.ts",
+      "language": "typescript",
+      "sizeLines": 77,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/utils/platform.ts",
+      "language": "typescript",
+      "sizeLines": 95,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/utils/session-env.ts",
+      "language": "typescript",
+      "sizeLines": 42,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/utils/win-shell.ts",
+      "language": "typescript",
+      "sizeLines": 115,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/utils/xpath.ts",
+      "language": "typescript",
+      "sizeLines": 42,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/winmux/cli.ts",
+      "language": "typescript",
+      "sizeLines": 267,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/winmux/client.ts",
+      "language": "typescript",
+      "sizeLines": 276,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/winmux/command.ts",
+      "language": "typescript",
+      "sizeLines": 322,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/winmux/daemon.ts",
+      "language": "typescript",
+      "sizeLines": 493,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/src/winmux/protocol.ts",
+      "language": "typescript",
+      "sizeLines": 130,
+      "fileCategory": "code"
+    },
+    {
+      "path": "server/tsconfig.json",
+      "language": "json",
+      "sizeLines": 17,
+      "fileCategory": "config"
+    },
+    {
+      "path": "version.json",
+      "language": "json",
+      "sizeLines": 6,
+      "fileCategory": "config"
+    }
+  ],
+  "totalFiles": 141,
+  "filteredByIgnore": 40,
+  "estimatedComplexity": "moderate",
+  "importMap": {
+    ".gitattributes": [],
+    ".github/workflows/desktop-build.yml": [],
+    ".github/workflows/release.yml": [],
+    ".github/workflows/test-macos-hooks.yml": [],
+    "README.md": [],
+    "WINDOWS.md": [],
+    "bin/octoally": [],
+    "bin/octoally-hidden.vbs": [],
+    "bin/octoally-win.mjs": [],
+    "bin/octoally.cmd": [],
+    "cli.mjs": [],
+    "dashboard/README.md": [],
+    "dashboard/eslint.config.js": [],
+    "dashboard/index.html": [],
+    "dashboard/package.json": [],
+    "dashboard/src/App.tsx": [
+      "dashboard/src/components/ActiveTerminals.tsx",
+      "dashboard/src/components/AgentGuide.tsx",
+      "dashboard/src/components/CloseAppModal.tsx",
+      "dashboard/src/components/CloseTabModal.tsx",
+      "dashboard/src/components/GlobalDictationButton.tsx",
+      "dashboard/src/components/GlobalMicButton.tsx",
+      "dashboard/src/components/ModelDownloadModal.tsx",
+      "dashboard/src/components/ProjectDashboard.tsx",
+      "dashboard/src/components/ProjectView.tsx",
+      "dashboard/src/components/SettingsModal.tsx",
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/platform.ts",
+      "dashboard/src/lib/shortcuts.ts",
+      "dashboard/src/lib/speech.ts",
+      "dashboard/src/lib/tauri.ts",
+      "dashboard/src/lib/trpc.ts",
+      "dashboard/src/lib/voice-commands.ts",
+      "dashboard/src/lib/websocket.ts"
+    ],
+    "dashboard/src/components/ActiveEvents.tsx": [
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/paths.ts",
+      "dashboard/src/lib/websocket.ts"
+    ],
+    "dashboard/src/components/ActiveTerminals.tsx": [
+      "dashboard/src/components/CliIcons.tsx",
+      "dashboard/src/components/Terminal.tsx",
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/shortcuts.ts"
+    ],
+    "dashboard/src/components/AgentGuide.tsx": [
+      "dashboard/src/lib/platform.ts"
+    ],
+    "dashboard/src/components/CliIcons.tsx": [],
+    "dashboard/src/components/CloseAppModal.tsx": [],
+    "dashboard/src/components/CloseTabModal.tsx": [
+      "dashboard/src/lib/shortcuts.ts"
+    ],
+    "dashboard/src/components/ConfirmModal.tsx": [],
+    "dashboard/src/components/DesktopUpdateBanner.tsx": [
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/tauri.ts"
+    ],
+    "dashboard/src/components/DiffComponents.tsx": [],
+    "dashboard/src/components/EventStream.tsx": [
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/paths.ts",
+      "dashboard/src/lib/websocket.ts"
+    ],
+    "dashboard/src/components/FileExplorer.tsx": [
+      "dashboard/src/components/ConfirmModal.tsx",
+      "dashboard/src/components/DiffComponents.tsx",
+      "dashboard/src/components/FilePreview.tsx",
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/paths.ts",
+      "dashboard/src/lib/platform.ts",
+      "dashboard/src/lib/preview.ts"
+    ],
+    "dashboard/src/components/FilePreview.tsx": [
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/platform.ts",
+      "dashboard/src/lib/preview.ts"
+    ],
+    "dashboard/src/components/GitPanel.tsx": [
+      "dashboard/src/components/DiffComponents.tsx",
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/paths.ts"
+    ],
+    "dashboard/src/components/GlobalDictationButton.tsx": [
+      "dashboard/src/lib/shortcuts.ts",
+      "dashboard/src/lib/speech.ts"
+    ],
+    "dashboard/src/components/GlobalMicButton.tsx": [
+      "dashboard/src/components/MicSettingsModal.tsx",
+      "dashboard/src/components/ModelSettingsModal.tsx",
+      "dashboard/src/lib/speech.ts"
+    ],
+    "dashboard/src/components/HistoryViewer.tsx": [
+      "dashboard/src/lib/api.ts"
+    ],
+    "dashboard/src/components/MicSettingsModal.tsx": [
+      "dashboard/src/lib/audio-cues.ts",
+      "dashboard/src/lib/tauri.ts"
+    ],
+    "dashboard/src/components/ModelDownloadModal.tsx": [
+      "dashboard/src/lib/speech.ts"
+    ],
+    "dashboard/src/components/ModelSettingsModal.tsx": [
+      "dashboard/src/lib/platform.ts",
+      "dashboard/src/lib/speech.ts",
+      "dashboard/src/lib/tauri.ts"
+    ],
+    "dashboard/src/components/NewTaskForm.tsx": [
+      "dashboard/src/components/AgentGuide.tsx",
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/paths.ts",
+      "dashboard/src/lib/platform.ts"
+    ],
+    "dashboard/src/components/ProjectDashboard.tsx": [
+      "dashboard/src/components/CliIcons.tsx",
+      "dashboard/src/components/ConfirmModal.tsx",
+      "dashboard/src/components/RufloDeprecationModal.tsx",
+      "dashboard/src/components/StatuslinePromptModal.tsx",
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/paths.ts",
+      "dashboard/src/lib/platform.ts",
+      "dashboard/src/lib/shortcuts.ts"
+    ],
+    "dashboard/src/components/ProjectView.tsx": [
+      "dashboard/src/components/CliIcons.tsx",
+      "dashboard/src/components/CloseTabModal.tsx",
+      "dashboard/src/components/FileExplorer.tsx",
+      "dashboard/src/components/GitPanel.tsx",
+      "dashboard/src/components/SessionLauncher.tsx",
+      "dashboard/src/components/Terminal.tsx",
+      "dashboard/src/components/WebPageView.tsx",
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/shortcuts.ts"
+    ],
+    "dashboard/src/components/RufloDeprecationModal.tsx": [
+      "dashboard/src/lib/api.ts"
+    ],
+    "dashboard/src/components/SessionLauncher.tsx": [
+      "dashboard/src/components/CliIcons.tsx",
+      "dashboard/src/components/SessionMicButton.tsx",
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/paths.ts",
+      "dashboard/src/lib/platform.ts",
+      "dashboard/src/lib/shortcuts.ts"
+    ],
+    "dashboard/src/components/SessionMicButton.tsx": [
+      "dashboard/src/lib/speech.ts"
+    ],
+    "dashboard/src/components/SessionView.tsx": [
+      "dashboard/src/components/EventStream.tsx",
+      "dashboard/src/components/FileExplorer.tsx",
+      "dashboard/src/components/GitPanel.tsx",
+      "dashboard/src/components/Terminal.tsx",
+      "dashboard/src/lib/api.ts"
+    ],
+    "dashboard/src/components/SettingsModal.tsx": [
+      "dashboard/src/components/CliIcons.tsx",
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/shortcuts.ts"
+    ],
+    "dashboard/src/components/StatuslinePromptModal.tsx": [
+      "dashboard/src/lib/api.ts"
+    ],
+    "dashboard/src/components/Terminal.tsx": [
+      "dashboard/src/components/HistoryViewer.tsx",
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/platform.ts",
+      "dashboard/src/lib/shortcuts.ts",
+      "dashboard/src/lib/speech.ts",
+      "dashboard/src/lib/terminal-file-links.ts"
+    ],
+    "dashboard/src/components/WebPageView.tsx": [
+      "dashboard/src/lib/tauri.ts"
+    ],
+    "dashboard/src/index.css": [],
+    "dashboard/src/lib/api.ts": [],
+    "dashboard/src/lib/audio-cues.ts": [],
+    "dashboard/src/lib/paths.ts": [],
+    "dashboard/src/lib/platform.ts": [
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/paths.ts"
+    ],
+    "dashboard/src/lib/preview.ts": [
+      "dashboard/src/lib/paths.ts",
+      "dashboard/src/lib/platform.ts"
+    ],
+    "dashboard/src/lib/shortcuts.ts": [],
+    "dashboard/src/lib/speech.ts": [
+      "dashboard/src/lib/audio-cues.ts",
+      "dashboard/src/lib/tauri.ts",
+      "dashboard/src/lib/voice-commands.ts"
+    ],
+    "dashboard/src/lib/tauri.ts": [],
+    "dashboard/src/lib/terminal-file-links.ts": [
+      "dashboard/src/lib/api.ts",
+      "dashboard/src/lib/paths.ts"
+    ],
+    "dashboard/src/lib/trpc.ts": [
+      "server/src/trpc/router.ts"
+    ],
+    "dashboard/src/lib/voice-commands.ts": [],
+    "dashboard/src/lib/websocket.ts": [
+      "dashboard/src/lib/api.ts"
+    ],
+    "dashboard/src/main.tsx": [
+      "dashboard/src/App.tsx",
+      "dashboard/src/index.css"
+    ],
+    "dashboard/tsconfig.app.json": [],
+    "dashboard/tsconfig.json": [],
+    "dashboard/tsconfig.node.json": [],
+    "dashboard/vite.config.ts": [],
+    "desktop-electron/package.json": [],
+    "desktop-electron/scripts/build.mjs": [],
+    "desktop-electron/src/crypto-store.ts": [],
+    "desktop-electron/src/desktop-settings.ts": [],
+    "desktop-electron/src/main.ts": [
+      "desktop-electron/src/desktop-settings.ts",
+      "desktop-electron/src/server-manager.ts",
+      "desktop-electron/src/speech/index.ts",
+      "desktop-electron/src/tray.ts"
+    ],
+    "desktop-electron/src/preload.ts": [],
+    "desktop-electron/src/server-manager.ts": [],
+    "desktop-electron/src/speech/audio.ts": [],
+    "desktop-electron/src/speech/cloud-whisper.ts": [
+      "desktop-electron/src/speech/whisper.ts"
+    ],
+    "desktop-electron/src/speech/command-classifier.ts": [],
+    "desktop-electron/src/speech/commands.ts": [],
+    "desktop-electron/src/speech/download.ts": [],
+    "desktop-electron/src/speech/index.ts": [
+      "desktop-electron/src/crypto-store.ts",
+      "desktop-electron/src/speech/audio.ts",
+      "desktop-electron/src/speech/cloud-whisper.ts",
+      "desktop-electron/src/speech/command-classifier.ts",
+      "desktop-electron/src/speech/commands.ts",
+      "desktop-electron/src/speech/download.ts",
+      "desktop-electron/src/speech/vad.ts",
+      "desktop-electron/src/speech/whisper.ts"
+    ],
+    "desktop-electron/src/speech/vad.ts": [],
+    "desktop-electron/src/speech/whisper.ts": [
+      "desktop-electron/src/speech/download.ts"
+    ],
+    "desktop-electron/src/tray.ts": [
+      "desktop-electron/src/desktop-settings.ts",
+      "desktop-electron/src/server-manager.ts"
+    ],
+    "desktop-electron/tsconfig.json": [],
+    "docs/TASKS.md": [],
+    "install.cmd": [],
+    "package.json": [],
+    "scripts/build-archive.sh": [],
+    "scripts/deploy-dev.sh": [],
+    "scripts/dev.sh": [],
+    "scripts/install.ps1": [],
+    "scripts/install.sh": [],
+    "scripts/release.sh": [],
+    "scripts/service/com.aigenius.octoally.plist": [],
+    "scripts/service/octoally.service": [],
+    "scripts/uninstall.ps1": [],
+    "scripts/uninstall.sh": [],
+    "scripts/update.sh": [],
+    "server/package.json": [],
+    "server/scripts/copy-data.mjs": [],
+    "server/scripts/e2e-windows.mjs": [],
+    "server/scripts/start.mjs": [],
+    "server/src/config.ts": [],
+    "server/src/data/default-agents.ts": [],
+    "server/src/data/octoally-hook.cjs": [],
+    "server/src/data/statusline.cjs": [],
+    "server/src/data/statusline.sh": [],
+    "server/src/db/index.ts": [
+      "server/src/config.ts"
+    ],
+    "server/src/index.ts": [
+      "server/src/config.ts",
+      "server/src/data/default-agents.ts",
+      "server/src/db/index.ts",
+      "server/src/routes/agent.ts",
+      "server/src/routes/events.ts",
+      "server/src/routes/files.ts",
+      "server/src/routes/git.ts",
+      "server/src/routes/projects.ts",
+      "server/src/routes/sessions.ts",
+      "server/src/routes/settings.ts",
+      "server/src/routes/stream.ts",
+      "server/src/routes/tasks.ts",
+      "server/src/routes/terminal.ts",
+      "server/src/services/preview-server.ts",
+      "server/src/services/session-manager.ts",
+      "server/src/trpc/router.ts",
+      "server/src/utils/enrich-path.ts",
+      "server/src/utils/hide-windows.ts",
+      "server/src/utils/platform.ts",
+      "server/src/utils/win-shell.ts",
+      "server/src/winmux/command.ts"
+    ],
+    "server/src/lib/ansi.ts": [],
+    "server/src/lib/jsonl-reader.ts": [],
+    "server/src/lib/pty.ts": [],
+    "server/src/lib/virtual-terminal.ts": [],
+    "server/src/routes/agent.ts": [
+      "server/src/services/session-manager.ts",
+      "server/src/services/session-state.ts"
+    ],
+    "server/src/routes/events.ts": [
+      "server/src/db/index.ts",
+      "server/src/services/event-store.ts"
+    ],
+    "server/src/routes/files.ts": [
+      "server/src/utils/xpath.ts"
+    ],
+    "server/src/routes/git.ts": [],
+    "server/src/routes/hooks.ts": [
+      "server/src/config.ts",
+      "server/src/utils/platform.ts"
+    ],
+    "server/src/routes/projects.ts": [
+      "server/src/data/default-agents.ts",
+      "server/src/db/index.ts",
+      "server/src/routes/settings.ts",
+      "server/src/utils/platform.ts",
+      "server/src/utils/xpath.ts"
+    ],
+    "server/src/routes/sessions.ts": [
+      "server/src/db/index.ts",
+      "server/src/services/session-manager.ts",
+      "server/src/services/session-state.ts",
+      "server/src/utils/win-shell.ts"
+    ],
+    "server/src/routes/settings.ts": [
+      "server/src/db/index.ts",
+      "server/src/utils/platform.ts"
+    ],
+    "server/src/routes/stream.ts": [
+      "server/src/services/event-store.ts"
+    ],
+    "server/src/routes/tasks.ts": [
+      "server/src/db/index.ts"
+    ],
+    "server/src/routes/terminal.ts": [
+      "server/src/db/index.ts",
+      "server/src/services/session-manager.ts"
+    ],
+    "server/src/services/event-store.ts": [
+      "server/src/db/index.ts"
+    ],
+    "server/src/services/preview-server.ts": [],
+    "server/src/services/pty-worker.ts": [
+      "server/src/lib/pty.ts",
+      "server/src/utils/hide-windows.ts",
+      "server/src/utils/session-env.ts",
+      "server/src/winmux/client.ts",
+      "server/src/winmux/command.ts"
+    ],
+    "server/src/services/session-manager.ts": [
+      "server/src/config.ts",
+      "server/src/db/index.ts",
+      "server/src/routes/settings.ts",
+      "server/src/services/event-store.ts",
+      "server/src/services/session-state.ts",
+      "server/src/utils/platform.ts",
+      "server/src/winmux/client.ts"
+    ],
+    "server/src/services/session-state.ts": [
+      "server/src/lib/ansi.ts",
+      "server/src/lib/jsonl-reader.ts",
+      "server/src/lib/virtual-terminal.ts",
+      "server/src/utils/platform.ts"
+    ],
+    "server/src/trpc/index.ts": [],
+    "server/src/trpc/router.ts": [
+      "server/src/db/index.ts",
+      "server/src/services/event-store.ts",
+      "server/src/services/session-manager.ts",
+      "server/src/trpc/index.ts"
+    ],
+    "server/src/utils/enrich-path.ts": [],
+    "server/src/utils/hide-windows.ts": [],
+    "server/src/utils/platform.ts": [
+      "server/src/winmux/command.ts"
+    ],
+    "server/src/utils/session-env.ts": [],
+    "server/src/utils/win-shell.ts": [
+      "server/src/winmux/command.ts"
+    ],
+    "server/src/utils/xpath.ts": [
+      "server/src/utils/platform.ts"
+    ],
+    "server/src/winmux/cli.ts": [
+      "server/src/winmux/client.ts",
+      "server/src/winmux/command.ts"
+    ],
+    "server/src/winmux/client.ts": [
+      "server/src/winmux/protocol.ts"
+    ],
+    "server/src/winmux/command.ts": [],
+    "server/src/winmux/daemon.ts": [
+      "server/src/lib/pty.ts",
+      "server/src/utils/hide-windows.ts",
+      "server/src/winmux/protocol.ts"
+    ],
+    "server/src/winmux/protocol.ts": [],
+    "server/tsconfig.json": [],
+    "version.json": []
+  }
+}
