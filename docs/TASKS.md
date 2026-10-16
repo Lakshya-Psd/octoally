@@ -1,19 +1,31 @@
 # Tasks
 
-Updated: 2026-10-13. Ledger for the native Windows port. See `../../PLAN.md` (master folder) for the plan and why, and `WINDOWS.md` for how to use it; this file is only what and when.
+Updated: 2026-10-16. Ledger for the native Windows port. See `../../PLAN.md` (master folder) for the plan and why, and `WINDOWS.md` for how to use it; this file is only what and when.
 
 ## In progress
+- [~] Reconnect on a popped-out session brings back the original chat instead of starting a new one — built (ef2b1a8); not yet seen working on a real popped-out session.
+- [~] Pasted image reaches Claude as an attached image — the path is typed into the session (seen in a browser); not yet tried in a live Claude chat.
 - [~] Desktop tray menu — installed app runs and started its own server; menu items not clicked by hand.
 - [~] Claude event hook as a Node script — built; the route that installs it is unused upstream too, so nothing in the UI reaches it.
 
 ## Blocked
-- [!] A Claude session doing real work — blocked by the `claude` command-line tool reporting "Login expired / Not logged in" inside OctoAlly (the Claude desktop app itself is signed in; that's a separate login). Unblocks when Lakshya runs `claude` in a terminal and, if asked, `/login`.
 
 ## Next
+- [ ] Optional: OctoAlly dashboard on the phone over Tailscale — large
+  **Why:** Lakshya wanted to follow sessions from the phone. Claude Code's Remote Control already covers chatting from the Claude app (turned on for all new chats 2026-10-14), so try that first; the full dashboard on a phone needs a login added, because OctoAlly has none today. Only if Remote Control isn't enough.
 - [ ] Optional: run upstream's Linux build in WSL to confirm nothing regressed for Linux — medium
   **Why:** every change is guarded to Windows, but Linux/macOS weren't re-run. Only matters if this fork will be shared with Linux/macOS users.
 
 ## Done
+- [x] Claude sessions doing real work inside OctoAlly — the CLI is signed in to Lakshya's Max plan (`claude auth status`, 2026-10-16) and live chats (GMC, pink-parotha, octoally) have been running real work in the dashboard. The old long-lived `CLAUDE_CODE_OAUTH_TOKEN` was removed so new sessions use this sign-in.
+- [x] Drop or paste files of any type into a session (Lakshya's request) — tested in the desktop app code with a real drop and real File Explorer copies: real paths arrived, a name with a space was quoted, drop outside a session opened nothing, browser upload fallback worked; new installer built and installed, sessions survived (98fdff4).
+- [x] Alt+Shift+Arrows moves the green focus in Active Sessions (Lakshya's request) — headless browser, 5 fake sessions in 2 columns: every move landed right and no keypress leaked into a session (ffc3db7).
+- [x] Drag project tabs to reorder them (Lakshya's request) — test browser: dragged "Artifacts" before "GMC", order swapped and was saved (7fb8f09).
+- [x] Drag sessions to reorder the Active Sessions grid (Lakshya's request) — throwaway copy with alpha/bravo/charlie: dragging alpha onto charlie's right half gave bravo, charlie, alpha, same after reload (802e3b5).
+- [x] Terminal buttons moved into the title bar, grouped by what they do — checked in screenshots of the grid and of project/session views (0941a04).
+- [x] Sessions drew without colour — server now drops the `NO_COLOR` setting it inherits when started from Claude Code; new e2e check; a fresh terminal showed colour again (ef2b1a8).
+- [x] Terminal buttons no longer cover Claude's panel close button — checked in a real browser (ef2b1a8; later moved into the title bar, 0941a04).
+- [x] Paste images into sessions (Lakshya's request) — e2e passes with two new checks (image saved, non-image refused); pasted into a test terminal in a real browser and the path appeared (f94a1ee).
 - [x] Visual previews in the file viewer, like the Claude desktop app (Lakshya's request) — seen working in the dashboard: video player, image with zoom, audio player, PDF viewer, live HTML page with its CSS/JS/image, SVG, CSV table, Markdown with image; preview updated on its own when the file changed; clicking a path printed in a terminal opened the video; Open-in-default-app opened Photos, Show-in-file-manager opened Explorer; previewed page could not reach the API; e2e 30/30 without pop-out (5a0226d).
 - [x] Desktop app installed and set to start at login — installed per-user to `%LOCALAPPDATA%\Programs\OctoAlly` (Start menu shortcut); Run key `com.aigenius.octoally` = `"…\OctoAlly.exe" --hidden`; launched from Explorer it started the server (PID 58704) and opened its window. Lakshya's call.
 - [x] `octoally update` on a branch with no remote — `update --force` reinstalled and rebuilt everything and restarted the server (6deff33).
