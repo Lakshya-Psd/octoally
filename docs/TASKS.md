@@ -11,12 +11,15 @@ Updated: 2026-10-16. Ledger for the native Windows port. See `../../PLAN.md` (ma
 ## Blocked
 
 ## Next
+- [ ] Optional: Restart Server picks up changed Windows settings — small
+  **Why:** the dashboard's Restart Server relaunches the server with the settings it already had, so a removed or changed Windows variable (like the old login token) keeps reaching sessions until the desktop app itself is restarted. Re-reading the user's variables on restart would stop that recurring.
 - [ ] Optional: OctoAlly dashboard on the phone over Tailscale — large
   **Why:** Lakshya wanted to follow sessions from the phone. Claude Code's Remote Control already covers chatting from the Claude app (turned on for all new chats 2026-10-14), so try that first; the full dashboard on a phone needs a login added, because OctoAlly has none today. Only if Remote Control isn't enough.
 - [ ] Optional: run upstream's Linux build in WSL to confirm nothing regressed for Linux — medium
   **Why:** every change is guarded to Windows, but Linux/macOS weren't re-run. Only matters if this fork will be shared with Linux/macOS users.
 
 ## Done
+- [x] Remote Control works in OctoAlly sessions — confirmed by Lakshya 2026-10-16. Cause: the server had started before the old long-lived `CLAUDE_CODE_OAUTH_TOKEN` was removed, kept it in memory and handed it to every session (a test session showed it; after restarting the desktop app and server, a new test session had none). Old sessions had to be restarted and resumed.
 - [x] Claude sessions doing real work inside OctoAlly — the CLI is signed in to Lakshya's Max plan (`claude auth status`, 2026-10-16) and live chats (GMC, pink-parotha, octoally) have been running real work in the dashboard. The old long-lived `CLAUDE_CODE_OAUTH_TOKEN` was removed so new sessions use this sign-in.
 - [x] Drop or paste files of any type into a session (Lakshya's request) — tested in the desktop app code with a real drop and real File Explorer copies: real paths arrived, a name with a space was quoted, drop outside a session opened nothing, browser upload fallback worked; new installer built and installed, sessions survived (98fdff4).
 - [x] Alt+Shift+Arrows moves the green focus in Active Sessions (Lakshya's request) — headless browser, 5 fake sessions in 2 columns: every move landed right and no keypress leaked into a session (ffc3db7).
