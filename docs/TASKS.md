@@ -1,6 +1,6 @@
 # Tasks
 
-Updated: 2026-10-16. Ledger for the native Windows port. See `../../PLAN.md` (master folder) for the plan and why, and `WINDOWS.md` for how to use it; this file is only what and when.
+Updated: 2026-11-03. Ledger for the native Windows port. See `../../PLAN.md` (master folder) for the plan and why, and `WINDOWS.md` for how to use it; this file is only what and when.
 
 ## In progress
 - [~] Reconnect on a popped-out session brings back the original chat instead of starting a new one — built (ef2b1a8); not yet seen working on a real popped-out session.
@@ -19,6 +19,8 @@ Updated: 2026-10-16. Ledger for the native Windows port. See `../../PLAN.md` (ma
   **Why:** every change is guarded to Windows, but Linux/macOS weren't re-run. Only matters if this fork will be shared with Linux/macOS users.
 
 ## Done
+- [x] Paths in the Active Sessions grid open in the project's File Explorer; right-click menu on paths (Lakshya's request, mock-up `docs/mockups/terminal-path-menu.html` approved) — separate test copy of OctoAlly (own port, data and session-manager pipe; real sessions checked untouched): 20 checks passed — grid path is a link, right click shows the approved menu (name, Open in OctoAlly, Show in Windows File Explorer, Open in default app, Copy path), "Show" asks Windows to reveal the file, Copy path gives backslashes, right click elsewhere shows no menu, left click leaves the grid for the project tab with the file selected and the video playing, also when the project tab wasn't open yet; 16 unit tests. Fixed on the way: xterm ran a link's left-click action on right clicks too; the File Explorer dropped an open request that came before its folder list loaded. Lakshya tried it in the real window: "it works" (52dc207).
+- [x] Clickable folders and wrapped paths in sessions (Lakshya's request) — test page with the screenshot's exact text: 14 clicks landed right (folders, files, paths split at "Windows 11" and mid-word, relative paths, a soft-wrapped path), plain words and ")," not linked; the real file explorer opened a clicked folder in its tree and browsed into one outside it; 10 unit tests (`npm test` in dashboard). Lakshya: "it works" (52dc207).
 - [x] Remote Control works in OctoAlly sessions — confirmed by Lakshya 2026-10-16. Cause: the server had started before the old long-lived `CLAUDE_CODE_OAUTH_TOKEN` was removed, kept it in memory and handed it to every session (a test session showed it; after restarting the desktop app and server, a new test session had none). Old sessions had to be restarted and resumed.
 - [x] Claude sessions doing real work inside OctoAlly — the CLI is signed in to Lakshya's Max plan (`claude auth status`, 2026-10-16) and live chats (GMC, pink-parotha, octoally) have been running real work in the dashboard. The old long-lived `CLAUDE_CODE_OAUTH_TOKEN` was removed so new sessions use this sign-in.
 - [x] Drop or paste files of any type into a session (Lakshya's request) — tested in the desktop app code with a real drop and real File Explorer copies: real paths arrived, a name with a space was quoted, drop outside a session opened nothing, browser upload fallback worked; new installer built and installed, sessions survived (98fdff4).
