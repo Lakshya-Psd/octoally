@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import type { PathType } from './lib/terminal-file-links';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
 import { trpc, createTRPCClient } from './lib/trpc';
 import { connectStream, useStreamStore, setQueryClient } from './lib/websocket';
@@ -64,6 +65,8 @@ function Dashboard() {
   const [savedState] = useState(loadAppState);
   const [activeTab, setActiveTab] = useState<string>(savedState?.activeTab ?? 'home');
   const [focusSessionId, setFocusSessionId] = useState<string | null>(null);
+  // A path clicked in the Active Sessions grid, for its project's File Explorer
+  const [openPathRequest, setOpenPathRequest] = useState<{ projectId: string; path: string; type?: PathType; key: number } | null>(null);
   const [projectTabs, setProjectTabs] = useState<ProjectTab[]>(() => {
     const tabs = savedState?.projectTabs ?? [];
     // Deduplicate by projectId
@@ -401,6 +404,16 @@ function Dashboard() {
     if (el && typeof el.blur === 'function') el.blur();
   });
 
+  // Switch to a project's tab, opening it first if needed
+  function showProjectTab(projectId: string) {
+    if (projectTabs.some((t) => t.projectId === projectId)) {
+      setActiveTab(`project-${projectId}`);
+    } else {
+      const project = projects.find((p) => p.id === projectId);
+      if (project) handleOpenProject(projectId, project.name);
+    }
+  }
+
   function handleOpenProject(projectId: string, projectName: string, quickLaunch?: 'session' | 'agent' | 'terminal', cliType?: 'claude' | 'codex') {
     setProjectTabs((prev) => {
       if (prev.find((t) => t.projectId === projectId)) return prev;
@@ -711,14 +724,13 @@ function Dashboard() {
               openProjectIds={projectTabs.map((t) => t.projectId)}
               hiddenSessionIds={hiddenSessionIds}
               onGoToSession={(projectId, sessionId) => {
-                const tab = projectTabs.find((t) => t.projectId === projectId);
-                if (tab) {
-                  setActiveTab(`project-${projectId}`);
-                } else {
-                  const project = projects.find((p) => p.id === projectId);
-                  if (project) handleOpenProject(projectId, project.name);
-                }
+                showProjectTab(projectId);
                 if (sessionId) setFocusSessionId(sessionId);
+                dismissActiveTerminals();
+              }}
+              onOpenPath={(projectId, path, type) => {
+                showProjectTab(projectId);
+                setOpenPathRequest({ projectId, path, type, key: Date.now() });
                 dismissActiveTerminals();
               }}
             />
@@ -763,6 +775,8 @@ function Dashboard() {
                   terminalsSuspended={showActiveTerminals}
                   focusSessionId={isActive ? focusSessionId : null}
                   onFocusSessionHandled={() => setFocusSessionId(null)}
+                  openPathRequest={openPathRequest?.projectId === tab.projectId ? openPathRequest : null}
+                  onOpenPathHandled={() => setOpenPathRequest(null)}
                   onHiddenSessionsChange={getHiddenSessionsCallback(tab.projectId)}
                 />
               )}

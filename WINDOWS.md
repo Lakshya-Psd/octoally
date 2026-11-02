@@ -111,7 +111,7 @@ Pages, SVG, Markdown and CSV files have a **Preview / Code** switch.
 
 - **Auto-refresh.** The preview reloads by itself when Claude changes the file.
 - **Toolbar buttons.** Reload, open in your browser, open in the default app, and show in File Explorer.
-- **Clickable paths.** When Claude mentions a file in a session (e.g. `C:\...\demo.mp4` or `src/App.tsx`), click it to open the preview.
+- **Clickable paths.** When Claude mentions a file or folder in a session (e.g. `C:\...\demo.mp4`, `src/App.tsx` or `videos/edit-v2/`), left-click it: a file opens in the preview, a folder opens in the file tree. From the Active Sessions grid this switches to the session's project first. Right-click a path for more: open it in OctoAlly, show it in Windows File Explorer, open it in its default app, or copy the path (right-click anywhere else still pastes). Paths that Claude's own line wrapping split over two or three lines (say at the space in `Windows 11`) still work.
 - **Safety.** Previewed web pages run on a separate local address, so they can't control OctoAlly.
 - **Paste images.** Paste a screenshot into a session (Ctrl+V, Ctrl+Shift+V or right-click). It's saved in `%USERPROFILE%\.octoally\pastes` and its path is typed in, so Claude gets the image. Pasted images are deleted after 7 days.
 - **Drop or paste files.** Drag files of any type (or folders) from File Explorer onto a session, or copy them in File Explorer and press Ctrl+V. Their paths are typed in. In the desktop app these are the files' real paths. A browser can't see where a file lives, so it uploads a copy to `%USERPROFILE%\.octoally\pastes` (up to 200 MB, no folders) and types the copy's path.

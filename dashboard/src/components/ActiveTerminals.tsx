@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import type { PathType } from '../lib/terminal-file-links';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type { Session, Project } from '../lib/api';
@@ -10,6 +11,8 @@ import { useShortcut } from '../lib/shortcuts';
 interface ActiveTerminalsProps {
   onBack: () => void;
   onGoToSession: (projectId: string, sessionId: string) => void;
+  /** A path clicked in a session's output: show it in that project's File Explorer. */
+  onOpenPath?: (projectId: string, path: string, type?: PathType) => void;
   openProjectIds?: string[];
   hiddenSessionIds?: string[];
 }
@@ -32,7 +35,7 @@ const MINIMIZED_KEY = 'octoally-active-terminals-minimized';
 /** The grid order the user dragged sessions into (session ids); others follow, A–Z. */
 const ORDER_KEY = 'octoally-active-terminals-order';
 
-export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenSessionIds }: ActiveTerminalsProps) {
+export function ActiveTerminals({ onBack, onGoToSession, onOpenPath, openProjectIds, hiddenSessionIds }: ActiveTerminalsProps) {
   const queryClient = useQueryClient();
   const [expanded, setExpanded] = useState<ExpandedSession | null>(null);
   // Title-bar spots the terminals draw their buttons into (keyed by session, and
@@ -172,6 +175,10 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
   const sessions = sessionsData?.sessions || [];
   const projects = projectsData?.projects || [];
   const projectMap = new Map<string, Project>(projects.map((p) => [p.id, p]));
+  // Paths in a session's output resolve against its project, and a left click shows them in its File Explorer.
+  const projectPathOf = (projectId: string | null) => (projectId ? projectMap.get(projectId)?.path : undefined);
+  const openPathIn = (projectId: string | null) =>
+    projectId && onOpenPath ? (path: string, type?: PathType) => onOpenPath(projectId, path, type) : undefined;
 
   const activeSessions = sessions.filter(
     (s) => s.status === 'running' || s.status === 'detached'
@@ -782,7 +789,7 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
                       }
                     }}
                   />
-                  <Terminal sessionId={session.id} visible={!expanded} passiveResize={!!expanded || session.task === 'Terminal' || (session as any).cli_type === 'codex'} hideCursor={session.task !== 'Terminal'} cliType={(session as any).cli_type as 'claude' | 'codex' | undefined} onPopOut={() => queryClient.invalidateQueries({ queryKey: ['sessions'] })} toolbarSlot={toolSlots[session.id] ?? null} popOutSlot={toolSlots[session.id + ':pop'] ?? null} />
+                  <Terminal sessionId={session.id} projectPath={projectPathOf(projectId)} onOpenFile={openPathIn(projectId)} visible={!expanded} passiveResize={!!expanded || session.task === 'Terminal' || (session as any).cli_type === 'codex'} hideCursor={session.task !== 'Terminal'} cliType={(session as any).cli_type as 'claude' | 'codex' | undefined} onPopOut={() => queryClient.invalidateQueries({ queryKey: ['sessions'] })} toolbarSlot={toolSlots[session.id] ?? null} popOutSlot={toolSlots[session.id + ':pop'] ?? null} />
                 </div>
               </div>
               );
@@ -877,7 +884,7 @@ export function ActiveTerminals({ onBack, onGoToSession, openProjectIds, hiddenS
             </div>
             {/* Full interactive terminal */}
             <div className="flex-1 min-h-0">
-              <Terminal sessionId={expanded.session.id} visible={true} hideCursor={expanded.session.task !== 'Terminal'} cliType={(expanded.session as any).cli_type as 'claude' | 'codex' | undefined} onPopOut={() => { setExpanded(null); queryClient.invalidateQueries({ queryKey: ['sessions'] }); }} toolbarSlot={toolSlots.expanded ?? null} />
+              <Terminal sessionId={expanded.session.id} projectPath={projectPathOf(expanded.projectId)} onOpenFile={openPathIn(expanded.projectId)} visible={true} hideCursor={expanded.session.task !== 'Terminal'} cliType={(expanded.session as any).cli_type as 'claude' | 'codex' | undefined} onPopOut={() => { setExpanded(null); queryClient.invalidateQueries({ queryKey: ['sessions'] }); }} toolbarSlot={toolSlots.expanded ?? null} />
             </div>
           </div>
         </div>

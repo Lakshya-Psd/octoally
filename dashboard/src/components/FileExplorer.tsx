@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { Folder, FolderOpen, File, ChevronRight, ChevronDown, ChevronUp, Loader2, Save, Circle, Eye, Pencil, Home, X, ArrowLeft, ArrowRight, ArrowUp, ArrowDown, GitCompareArrows, FolderOpen as FolderOpenIcon, Terminal, Scissors, Copy as CopyIcon, Clipboard, Trash2, Edit3, RotateCw, ExternalLink, Globe, Code } from 'lucide-react';
 import { api, type FileEntry } from '../lib/api';
 import { ConfirmModal } from './ConfirmModal';
+import { ContextMenu, type ContextMenuItem, type ContextMenuState } from './ContextMenu';
 import { FilePreview, PreviewUnavailable } from './FilePreview';
 import { previewKind, isMediaKind, hasSourceView, previewUrl, type PreviewKind } from '../lib/preview';
 import { usePlatform } from '../lib/platform';
@@ -30,11 +31,14 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+/** Ask the explorer to open a file, or show a folder (e.g. a path clicked in a terminal). */
+export type OpenFileRequest = { path: string; key: number; type?: 'file' | 'directory' };
+
 interface FileExplorerProps {
   rootPath: string;
   instanceId?: string; // unique ID for localStorage persistence
   refreshFilePath?: string | null; // when set, reload this file if it's open and not dirty
-  openFileRequest?: { path: string; key: number } | null; // when key changes, open & reveal this file
+  openFileRequest?: OpenFileRequest | null; // when key changes, open & reveal this file or folder
   onFileSaved?: (filePath: string) => void; // notify parent when a file is saved
 }
 
@@ -174,83 +178,6 @@ function getExpandedPaths(nodes: TreeNode[]): string[] {
     }
   }
   return paths;
-}
-
-interface ContextMenuItem {
-  kind?: 'item' | 'separator';
-  label?: string;
-  icon?: React.ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-  danger?: boolean;
-}
-
-interface ContextMenuState {
-  x: number;
-  y: number;
-  items: ContextMenuItem[];
-}
-
-function ContextMenu({ x, y, items, onClose }: ContextMenuState & { onClose: () => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState({ x, y });
-
-  useEffect(() => {
-    // Adjust position if menu would overflow viewport
-    if (ref.current) {
-      const rect = ref.current.getBoundingClientRect();
-      let nx = x;
-      let ny = y;
-      if (x + rect.width > window.innerWidth - 8) nx = Math.max(8, window.innerWidth - rect.width - 8);
-      if (y + rect.height > window.innerHeight - 8) ny = Math.max(8, window.innerHeight - rect.height - 8);
-      if (nx !== x || ny !== y) setPos({ x: nx, y: ny });
-    }
-    const onDown = () => onClose();
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose]);
-
-  return (
-    <div
-      ref={ref}
-      role="menu"
-      className="fixed z-[60] rounded-md shadow-lg py-1 text-xs"
-      style={{
-        left: pos.x,
-        top: pos.y,
-        background: 'var(--bg-secondary)',
-        border: '1px solid var(--border)',
-        minWidth: 200,
-        color: 'var(--text-primary)',
-      }}
-      onMouseDown={(e) => e.stopPropagation()}
-      onContextMenu={(e) => e.preventDefault()}
-    >
-      {items.map((item, i) => {
-        if (item.kind === 'separator') {
-          return <div key={i} className="my-1" style={{ borderTop: '1px solid var(--border)' }} />;
-        }
-        return (
-          <button
-            key={i}
-            disabled={item.disabled}
-            onClick={() => { if (!item.disabled && item.onClick) { item.onClick(); onClose(); } }}
-            className="flex items-center gap-2 w-full px-3 py-1.5 text-left hover:bg-[var(--bg-tertiary)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            style={{ color: item.danger ? 'var(--error)' : 'var(--text-primary)' }}
-          >
-            <span className="w-3.5 h-3.5 flex items-center justify-center shrink-0">{item.icon}</span>
-            <span className="truncate">{item.label}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
 }
 
 function TreeItem({
@@ -436,6 +363,8 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
   // Tab state
   const [tabs, setTabs] = useState<FileTab[]>([]);
   const [activeTabPath, setActiveTabPath] = useState<string | null>(null);
+  // A folder clicked in a terminal, highlighted in the tree until a file is opened
+  const [revealedDir, setRevealedDir] = useState<string | null>(null);
 
   // Resizable tree panel
   const [treePanelWidth, setTreePanelWidth] = useState(280);
@@ -513,13 +442,14 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
   }
 
   // Reveal a file in the tree: expand ancestor folders and scroll to it
-  async function revealFileInTree(filePath: string) {
+  // (with expandSelf, the path is a folder and is opened too)
+  async function revealFileInTree(filePath: string, expandSelf = false) {
     // Separator-boundary aware (and case-insensitive for Windows paths)
     const relative = relativeSubPath(filePath, currentPath);
     if (!relative) return;
 
     const parts = relative.split('/');
-    parts.pop(); // remove file name — we only need directories
+    if (!expandSelf) parts.pop(); // remove file name — we only need directories
 
     // Expand each ancestor directory
     let dirPath = currentPath;
@@ -580,6 +510,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
 
   // Open a file as a preview (single-click) or pinned (double-click)
   async function openFile(path: string, pin: boolean) {
+    setRevealedDir(null);
     // If already open, just switch to it (and pin if double-click)
     const existing = tabs.find(t => t.path === path);
     if (existing) {
@@ -854,10 +785,11 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
   useEffect(() => {
     if (!openFileRequest) return;
     if (openFileRequest.key === lastOpenRequestKey.current) return;
-    lastOpenRequestKey.current = openFileRequest.key;
-    // Defer until root has loaded so reveal can find the node
+    // Defer until root has loaded so reveal can find the node (this effect runs again then)
     if (!rootLoaded) return;
-    openFile(openFileRequest.path, true);
+    lastOpenRequestKey.current = openFileRequest.key;
+    if (openFileRequest.type === 'directory') showFolder(openFileRequest.path);
+    else openFile(openFileRequest.path, true);
     // openFile sets activeTabPath, which the existing reveal effect picks up
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openFileRequest, rootLoaded]);
@@ -1039,7 +971,15 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
     }
   }, [showHidden]);
 
+  // A folder clicked in a terminal: open it in the tree, or browse into it when it lies outside
+  function showFolder(dirPath: string) {
+    if (relativeSubPath(dirPath, currentPath) === null) { navigateTo(dirPath); return; }
+    setRevealedDir(dirPath);
+    revealFileInTree(dirPath, true);
+  }
+
   function navigateTo(path: string) {
+    setRevealedDir(null);
     // Accepts typed `C:\x\` too; drive roots stay `C:/` (never `C:`)
     const trimmed = normalizePath(path) || rootOf(rootPath);
     setCurrentPath(trimmed);
@@ -1388,7 +1328,7 @@ export function FileExplorer({ rootPath, instanceId, refreshFilePath, openFileRe
             onFileClick={handleFileClick}
             onFileDoubleClick={handleFileDoubleClick}
             onContextMenu={openContextMenuFor}
-            selectedPath={activeTabPath}
+            selectedPath={revealedDir ?? activeTabPath}
             renamingPath={renamingPath}
             onRenameSubmit={submitRename}
             onRenameCancel={() => setRenamingPath(null)}

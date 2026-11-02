@@ -1,16 +1,19 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { createPortal } from 'react-dom';
-import { RotateCcw, TerminalSquare, ZoomIn, ZoomOut } from 'lucide-react';
+import { Copy, ExternalLink, FolderOpen, FolderTree, RotateCcw, TerminalSquare, ZoomIn, ZoomOut } from 'lucide-react';
 import { useSpeechStore } from '../lib/speech';
 import { isKeyboardNavActive } from '../lib/shortcuts';
 import { api } from '../lib/api';
 import { isWindowsClient, getPlatformSync } from '../lib/platform';
-import { registerFileLinks } from '../lib/terminal-file-links';
+import { registerFileLinks, type PathType } from '../lib/terminal-file-links';
+import { pathForClipboard, pathMenuEntries, type PathMenuAction } from '../lib/path-menu';
+import { baseName } from '../lib/paths';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { HistoryViewer } from './HistoryViewer';
 import '@xterm/xterm/css/xterm.css';
 
@@ -53,8 +56,8 @@ interface TerminalProps {
   onPopOut?: () => void;
   /** Project folder, for resolving relative file paths printed in the terminal. */
   projectPath?: string;
-  /** Called when a file path in the output is clicked (opens it in the file viewer). */
-  onOpenFile?: (path: string) => void;
+  /** Called when a file or folder path in the output is clicked (opens it in the file viewer). */
+  onOpenFile?: (path: string, type?: PathType) => void;
   /** Where the buttons (zoom, pop out, refresh) draw: a host's title bar, null
    *  while it mounts. Left out, they get a strip above the terminal. */
   toolbarSlot?: HTMLElement | null;
@@ -62,6 +65,13 @@ interface TerminalProps {
    *  open-elsewhere buttons; left out, it follows the others. */
   popOutSlot?: HTMLElement | null;
 }
+
+const PATH_MENU_ICONS: Record<PathMenuAction, ReactNode> = {
+  'open-here': <FolderTree className="w-3.5 h-3.5" />,
+  reveal: <FolderOpen className="w-3.5 h-3.5" />,
+  'open-default': <ExternalLink className="w-3.5 h-3.5" />,
+  copy: <Copy className="w-3.5 h-3.5" />,
+};
 
 export function Terminal({ sessionId, visible = true, suspended = false, passiveResize = false, hideCursor = false, cliType, onExit, onReconnect, onPopOut, projectPath, onOpenFile, toolbarSlot, popOutSlot }: TerminalProps) {
   // Latest values for the file-link provider, which is registered once per terminal.
@@ -83,6 +93,9 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
   });
   const configuredFontSize = Number(settingsData?.settings?.terminal_font_size) || 12;
   const [showHistory, setShowHistory] = useState(false);
+  // The menu for a file or folder path that was right-clicked
+  const [pathMenu, setPathMenu] = useState<{ x: number; y: number; path: string; type: PathType } | null>(null);
+  const closePathMenu = useCallback(() => setPathMenu(null), []);
 
   // Expose connect/disconnect so the suspension effect can control it
   const connectFnRef = useRef<(() => void) | null>(null);
@@ -222,13 +235,13 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       }
     }));
 
-    // Make file paths in the output clickable — open them in the file viewer
-    // (or the default app when this terminal has no viewer, e.g. the grid).
-    registerFileLinks(term, {
+    // Make file and folder paths in the output clickable — open them in the file viewer
+    // (or the default app when this terminal has no viewer, e.g. a session with no project).
+    const fileLinks = registerFileLinks(term, {
       getProjectPath: () => projectPathRef.current,
       isWindows: () => getPlatformSync().platform === 'win32',
-      onOpen: (path) => {
-        if (onOpenFileRef.current) onOpenFileRef.current(path);
+      onOpen: (path, type) => {
+        if (onOpenFileRef.current) onOpenFileRef.current(path, type);
         else api.files.openExternal(path).catch(() => {});
       },
     });
@@ -404,12 +417,21 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
     dropTarget.addEventListener('dragover', dragOverHandler);
     dropTarget.addEventListener('drop', dropHandler);
 
-    // Windows: right-click copies the selection if there is one, otherwise
+    // Right-click on a file or folder path opens its menu. Otherwise, on
+    // Windows, right-click copies the selection if there is one, or else
     // pastes (Windows Terminal behaviour). The browser menu is suppressed only
     // when we handled the click. Apps that track the mouse (e.g. TUIs with
     // mouse mode on) keep receiving right-clicks unless Shift is held.
     const contextTarget = containerRef.current;
     const contextMenuHandler = (ev: MouseEvent) => {
+      const link = term.hasSelection() ? null : fileLinks.hovered();
+      if (link) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        setPathMenu({ x: ev.clientX, y: ev.clientY, path: link.path, type: link.type });
+        return;
+      }
+      if (!isWindowsClient) return;
       if (term.hasSelection()) {
         copySelection();
         term.clearSelection();
@@ -424,7 +446,7 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       ev.stopPropagation();
       term.focus();
     };
-    if (isWindowsClient) contextTarget.addEventListener('contextmenu', contextMenuHandler, { capture: true });
+    contextTarget.addEventListener('contextmenu', contextMenuHandler, { capture: true });
 
     termRef.current = term;
     fitRef.current = fitAddon;
@@ -693,7 +715,7 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       pasteTarget.removeEventListener('paste', pasteHandler, { capture: true } as EventListenerOptions);
       dropTarget.removeEventListener('dragover', dragOverHandler);
       dropTarget.removeEventListener('drop', dropHandler);
-      if (isWindowsClient) contextTarget.removeEventListener('contextmenu', contextMenuHandler, { capture: true } as EventListenerOptions);
+      contextTarget.removeEventListener('contextmenu', contextMenuHandler, { capture: true } as EventListenerOptions);
       wsRef.current?.close();
       term.dispose();
     };
@@ -1033,6 +1055,21 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
     </>
   );
 
+  // What each entry of the path menu does.
+  const runPathAction = (action: PathMenuAction, path: string, type: PathType) => {
+    const platform = getPlatformSync().platform;
+    if (action === 'open-here') onOpenFileRef.current?.(path, type);
+    else if (action === 'reveal') api.files.openExternal(path, type === 'file').catch(() => {});
+    else if (action === 'open-default') api.files.openExternal(path).catch(() => {});
+    else navigator.clipboard?.writeText(pathForClipboard(path, platform)).catch(() => {});
+  };
+  const pathMenuItems: ContextMenuItem[] = pathMenu
+    ? pathMenuEntries({ type: pathMenu.type, canOpenHere: !!onOpenFile, platform: getPlatformSync().platform }).map((e) =>
+      e === 'separator'
+        ? { kind: 'separator' }
+        : { label: e.label, icon: PATH_MENU_ICONS[e.action], onClick: () => runPathAction(e.action, pathMenu.path, pathMenu.type) })
+    : [];
+
   return (
     <div className="h-full relative group/terminal flex flex-col" onClick={() => termRef.current?.focus()}>
       {inSlot ? (toolbarSlot ? createPortal(tools, toolbarSlot) : null) : (
@@ -1050,6 +1087,10 @@ export function Terminal({ sessionId, visible = true, suspended = false, passive
       />
       {showHistory && (
         <HistoryViewer sessionId={sessionId} onClose={() => setShowHistory(false)} />
+      )}
+      {pathMenu && createPortal(
+        <ContextMenu x={pathMenu.x} y={pathMenu.y} title={baseName(pathMenu.path)} items={pathMenuItems} onClose={closePathMenu} />,
+        document.body,
       )}
     </div>
   );

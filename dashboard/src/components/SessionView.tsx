@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Monitor, FolderTree, Code2, Radio, GitBranch, Plus, X } from 'lucide-react';
 import { Terminal } from './Terminal';
-import { FileExplorer } from './FileExplorer';
+import { FileExplorer, type OpenFileRequest } from './FileExplorer';
 import { EventStream } from './EventStream';
 import { GitPanel } from './GitPanel';
 import { api } from '../lib/api';
@@ -263,10 +263,10 @@ export function SessionView({ sessionId, projectPath, projectId: _projectId, onE
   }, []);
 
   // "Reveal in explorer" — switch to explorer mode and tell the active explorer to open the file
-  const [openInExplorerRequest, setOpenInExplorerRequest] = useState<{ path: string; key: number } | null>(null);
-  const handleOpenInExplorer = useCallback((filePath: string) => {
+  const [openInExplorerRequest, setOpenInExplorerRequest] = useState<OpenFileRequest | null>(null);
+  const handleOpenInExplorer = useCallback((filePath: string, type?: OpenFileRequest['type']) => {
     setActiveMode('explorer');
-    setOpenInExplorerRequest({ path: filePath, key: Date.now() });
+    setOpenInExplorerRequest({ path: filePath, key: Date.now(), type });
   }, []);
 
   // When switching to git view after explorer saved, trigger refresh

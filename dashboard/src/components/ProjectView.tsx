@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Monitor, FolderTree, Code2, GitBranch, Home, Plus, X, Download, LayoutGrid, Maximize2, Minimize2, ExternalLink, Globe, Zap, Bot, TerminalSquare, Columns3, Rows3, ChevronDown } from 'lucide-react';
 import { ClaudeIcon, CodexIcon } from './CliIcons';
 import { Terminal } from './Terminal';
-import { FileExplorer } from './FileExplorer';
+import { FileExplorer, type OpenFileRequest } from './FileExplorer';
 import { GitPanel } from './GitPanel';
 import { SessionLauncher } from './SessionLauncher';
 import { WebPageView } from './WebPageView';
@@ -22,6 +22,9 @@ interface ProjectViewProps {
   /** When set, switch to this terminal session ID and clear it */
   focusSessionId?: string | null;
   onFocusSessionHandled?: () => void;
+  /** When set, show this path in the File Explorer and clear it */
+  openPathRequest?: { path: string; type?: OpenFileRequest['type']; key: number } | null;
+  onOpenPathHandled?: () => void;
   /** Report hidden (closed-tab) session IDs to parent */
   onHiddenSessionsChange?: (sessionIds: string[]) => void;
 }
@@ -102,7 +105,7 @@ const sidebarButtons = [
   { id: 'git' as const, icon: GitBranch, title: 'Source Control' },
 ] as const;
 
-export function ProjectView({ projectId, projectPath, projectName: _projectName, active = true, terminalsSuspended = false, focusSessionId, onFocusSessionHandled, onHiddenSessionsChange }: ProjectViewProps) {
+export function ProjectView({ projectId, projectPath, projectName: _projectName, active = true, terminalsSuspended = false, focusSessionId, onFocusSessionHandled, openPathRequest, onOpenPathHandled, onHiddenSessionsChange }: ProjectViewProps) {
   const queryClient = useQueryClient();
 
   // Fetch project data for SessionLauncher
@@ -823,11 +826,19 @@ export function ProjectView({ projectId, projectPath, projectName: _projectName,
   }, []);
 
   // "Reveal in explorer" — switch mode and tell the active explorer to open the file
-  const [openInExplorerRequest, setOpenInExplorerRequest] = useState<{ path: string; key: number } | null>(null);
-  const handleOpenInExplorer = useCallback((filePath: string) => {
+  const [openInExplorerRequest, setOpenInExplorerRequest] = useState<OpenFileRequest | null>(null);
+  const handleOpenInExplorer = useCallback((filePath: string, type?: OpenFileRequest['type']) => {
     setActiveMode('explorer');
-    setOpenInExplorerRequest({ path: filePath, key: Date.now() });
+    setOpenInExplorerRequest({ path: filePath, key: Date.now(), type });
   }, []);
+
+  // A path clicked in the Active Sessions grid
+  useEffect(() => {
+    if (!openPathRequest) return;
+    handleOpenInExplorer(openPathRequest.path, openPathRequest.type);
+    onOpenPathHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openPathRequest]);
 
   const prevMode = useRef(activeMode);
   useEffect(() => {
